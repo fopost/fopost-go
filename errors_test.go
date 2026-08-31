@@ -35,7 +35,7 @@ func TestErrorCarriesCodeAndMessage(t *testing.T) {
 func TestPaymentRequiredExposesUpgradeURL(t *testing.T) {
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusPaymentRequired)
-		_, _ = io.WriteString(w, `{"error":"insufficient_credits","message":"Out of AI credits","upgrade_url":"https://app.fopost.com/settings/billing"}`)
+		_, _ = io.WriteString(w, `{"error":"insufficient_credits","message":"Out of AI credits","upgrade_url":"https://fopost.com/dashboard/settings/billing"}`)
 	})
 
 	_, err := client.Posts.Publish(context.Background(), "post_1", nil)
@@ -43,7 +43,7 @@ func TestPaymentRequiredExposesUpgradeURL(t *testing.T) {
 		t.Fatalf("err = %v, want a 402", err)
 	}
 	apiErr, _ := APIError(err)
-	if apiErr.UpgradeURL() != "https://app.fopost.com/settings/billing" {
+	if apiErr.UpgradeURL() != "https://fopost.com/dashboard/settings/billing" {
 		t.Fatalf("UpgradeURL() = %q", apiErr.UpgradeURL())
 	}
 }

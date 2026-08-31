@@ -67,7 +67,7 @@ func main() {
 ```
 
 Get a key from **Settings → API Keys** in the FoPost dashboard
-(<https://app.fopost.com/settings/api-keys>). Every method takes a
+(<https://fopost.com/dashboard/settings/api-keys>). Every method takes a
 `context.Context` first, and the client is safe for concurrent use.
 
 ## Content
