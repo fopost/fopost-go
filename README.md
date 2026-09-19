@@ -256,7 +256,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Posts`       | `List`, `Each`, `ListAll`, `Get`, `Create`, `Update`, `Delete`, `Duplicate`, `Publish`, `Retry`, `Cancel`, `Preflight`, `Deliveries`, `PublishRuns`, `Analytics`, `BulkShift`, `BulkLabel`, `BulkDelete`, `ValidateBulkImport`, `CommitBulkImport`, `RollbackBulkImport` |
 | `Workspaces`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Analytics`                                                                                                          |
-| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`           |
+| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands` |
 | `AccountGroups` | `List`, `Get`, `Create`, `Update`, `Delete`, `SetMembers`                                                                                                       |
 | `Communities` | `List`, `Sync`, `Search`, `Add`, `Remove`                                                                                                                         |
 | `Labels`      | `List`, `Get`, `Create`, `Update`, `Delete`                                                                                                                       |
