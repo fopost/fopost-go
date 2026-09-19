@@ -5,7 +5,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 ## What This Is
 
 Go module `github.com/fopost/fopost-go` — the official Go client for the FoPost REST API
-(`fopost.com`). `fopost.Version` is `0.2.0`. It wraps the API's HTTP surface in services
+(`fopost.com`). `fopost.Version` is `0.3.0`. It wraps the API's HTTP surface in services
 hung off `*Client`: `Posts`, `Workspaces`, `Accounts`, `Communities`, `Labels`, `Webhooks`,
 `Analytics`, `Automations`, `Media`, `Inbox`, `Ads`, `Validate`.
 
