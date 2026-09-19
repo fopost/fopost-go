@@ -107,13 +107,28 @@ type InboxItem struct {
 	RepliedAt        Time              `json:"repliedAt"`
 	CreatedAt        Time              `json:"createdAt"`
 	// CanReply is false on platforms whose API reads but cannot answer.
-	CanReply    bool              `json:"canReply"`
-	Hidden      bool              `json:"hidden"`
-	CanHide     bool              `json:"canHide"`
-	CanDelete   bool              `json:"canDelete"`
-	Post        *InboxPostRef     `json:"post"`
-	PostContext *InboxPostContext `json:"postContext"`
-	Account     *InboxAccountRef  `json:"account"`
+	CanReply bool `json:"canReply"`
+	Hidden   bool `json:"hidden"`
+	Liked    bool `json:"liked"`
+	Pinned   bool `json:"pinned"`
+	// Reaction is our reaction on a DM, empty when there is none.
+	Reaction string `json:"reaction"`
+	EditedAt Time   `json:"editedAt"`
+	CanHide  bool   `json:"canHide"`
+	// CanDelete covers a comment someone left and our own reply.
+	CanDelete bool `json:"canDelete"`
+	CanLike   bool `json:"canLike"`
+	// CanPin and CanEdit apply to our own comment only.
+	CanPin        bool `json:"canPin"`
+	CanEdit       bool `json:"canEdit"`
+	CanReact      bool `json:"canReact"`
+	CanSendMedia  bool `json:"canSendMedia"`
+	CanQuickReply bool `json:"canQuickReply"`
+	// CanPrivateReply means StartConversation can answer this comment by DM.
+	CanPrivateReply bool              `json:"canPrivateReply"`
+	Post            *InboxPostRef     `json:"post"`
+	PostContext     *InboxPostContext `json:"postContext"`
+	Account         *InboxAccountRef  `json:"account"`
 }
 
 // InboxThread is one platform post with comments, or one post the account was
@@ -165,6 +180,8 @@ type InboxAccount struct {
 	PendingReason   string `json:"pendingReason"`
 	DMSupported     bool   `json:"dmSupported"`
 	DMPendingReason string `json:"dmPendingReason"`
+	// CanStartConversation means a new DM can be opened from this account by handle.
+	CanStartConversation bool `json:"canStartConversation"`
 }
 
 // InboxPlatform is one network and its inbox support. Comments and DMs are
@@ -470,6 +487,17 @@ func (s *InboxService) Update(ctx context.Context, id string, body *UpdateInboxI
 	return out, nil
 }
 
+// EditComment edits a comment the account wrote, on the platform. Also needs
+// the `publish` scope.
+func (s *InboxService) EditComment(ctx context.Context, id, text string) (*InboxItem, error) {
+	body := map[string]string{"text": text}
+	out := &InboxItem{}
+	if err := s.client.json(ctx, "PATCH", "/inbox/"+url.PathEscape(id), body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InboxReplyRef is where a sent reply landed on the platform.
 type InboxReplyRef struct {
 	ExternalID  string `json:"externalId"`
@@ -482,9 +510,23 @@ type InboxReplyResult struct {
 	Reply InboxReplyRef `json:"reply"`
 }
 
+// InboxReplyRequest is the body of ReplyWith. Text may be empty when
+// MediaIDs is set; MediaIDs and QuickReplies also need the `publish` scope.
+type InboxReplyRequest struct {
+	Text string `json:"text,omitempty"`
+	// MediaIDs are media library ids to attach to a DM, at most 10.
+	MediaIDs []string `json:"media_ids,omitempty"`
+	// QuickReplies are answer buttons under a DM, at most 13 of 20 characters each.
+	QuickReplies []string `json:"quick_replies,omitempty"`
+}
+
 // Reply sends text on the platform as the connected account.
 func (s *InboxService) Reply(ctx context.Context, id, text string) (*InboxReplyResult, error) {
-	body := map[string]string{"text": text}
+	return s.ReplyWith(ctx, id, &InboxReplyRequest{Text: text})
+}
+
+// ReplyWith sends a reply that may carry media and quick replies.
+func (s *InboxService) ReplyWith(ctx context.Context, id string, body *InboxReplyRequest) (*InboxReplyResult, error) {
 	out := &InboxReplyResult{}
 	if err := s.client.json(ctx, "POST", "/inbox/"+url.PathEscape(id)+"/reply", body, nil, out); err != nil {
 		return nil, err
@@ -510,9 +552,89 @@ func (s *InboxService) Unhide(ctx context.Context, id string) (*InboxItem, error
 	return out, nil
 }
 
-// Delete deletes a comment on the platform.
+// Delete deletes a comment on the platform, or our own reply (which also
+// needs the `publish` scope).
 func (s *InboxService) Delete(ctx context.Context, id string) error {
 	return s.client.Do(ctx, "DELETE", "/inbox/"+url.PathEscape(id), nil, nil, nil)
+}
+
+func (s *InboxService) action(ctx context.Context, id, action string, body any) (*InboxItem, error) {
+	out := &InboxItem{}
+	if err := s.client.json(ctx, "POST", "/inbox/"+url.PathEscape(id)+"/"+action, body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Like likes an item: an upvote on Reddit, a favourite on Mastodon. Also needs
+// the `publish` scope.
+func (s *InboxService) Like(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "like", nil)
+}
+
+// Unlike removes our like. Also needs the `publish` scope.
+func (s *InboxService) Unlike(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "unlike", nil)
+}
+
+// Pin pins our own comment. Also needs the `publish` scope.
+func (s *InboxService) Pin(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "pin", nil)
+}
+
+// Unpin unpins our own comment. Also needs the `publish` scope.
+func (s *InboxService) Unpin(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "unpin", nil)
+}
+
+// React reacts to a DM with an emoji; a nil reaction removes ours. Also needs
+// the `publish` scope.
+func (s *InboxService) React(ctx context.Context, id string, reaction *string) (*InboxItem, error) {
+	body := struct {
+		Reaction *string `json:"reaction"`
+	}{reaction}
+	return s.action(ctx, id, "react", body)
+}
+
+// StartInboxConversationRequest is the body of StartConversation. Set Handle
+// and AccountID to message someone, or CommentID to answer an inbox comment
+// privately.
+type StartInboxConversationRequest struct {
+	AccountID string `json:"account_id,omitempty"`
+	Handle    string `json:"handle,omitempty"`
+	CommentID string `json:"comment_id,omitempty"`
+	Text      string `json:"text"`
+	// MediaIDs are media library ids to attach, at most 10.
+	MediaIDs []string `json:"media_ids,omitempty"`
+}
+
+// InboxStartedConversation is the DM StartConversation opened. Either field
+// may be empty when the platform does not report it.
+type InboxStartedConversation struct {
+	ConversationID string     `json:"conversationId"`
+	Item           *InboxItem `json:"item"`
+}
+
+// StartConversation opens a DM. Also needs the `publish` scope.
+func (s *InboxService) StartConversation(ctx context.Context, body *StartInboxConversationRequest) (*InboxStartedConversation, error) {
+	out := &InboxStartedConversation{}
+	if err := s.client.json(ctx, "POST", "/inbox/conversations", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetTyping shows or clears the typing indicator in a DM thread and returns
+// whether it is on. Also needs the `publish` scope.
+func (s *InboxService) SetTyping(ctx context.Context, conversationID, accountID string, on bool) (bool, error) {
+	body := map[string]any{"account_id": accountID, "on": on}
+	var out struct {
+		Typing bool `json:"typing"`
+	}
+	if err := s.client.json(ctx, "POST", "/inbox/conversations/"+url.PathEscape(conversationID)+"/typing", body, nil, &out); err != nil {
+		return false, err
+	}
+	return out.Typing, nil
 }
 
 // ListApprovals returns drafted replies a person still has to send, optionally

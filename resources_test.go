@@ -3,6 +3,7 @@ package fopost
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -379,6 +380,156 @@ func TestInboxReplyPostsTextAndDecodesTheReply(t *testing.T) {
 	}
 	if result.Item.ID != "itm_1" || result.Item.RepliedAt.IsZero() || result.Reply.ExternalID != "18002" {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestInboxReplyWithSendsMediaAndQuickRepliesWithoutText(t *testing.T) {
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"item":{"id":"itm_1"},"reply":{"externalId":null,"externalUrl":null}}}`)
+	})
+
+	_, err := client.Inbox.ReplyWith(context.Background(), "itm_1", &InboxReplyRequest{
+		MediaIDs:     []string{"med_1"},
+		QuickReplies: []string{"Yes", "No"},
+	})
+	if err != nil {
+		t.Fatalf("Inbox.ReplyWith: %v", err)
+	}
+	if _, present := body["text"]; present {
+		t.Fatalf("text sent empty: %v", body)
+	}
+	if fmt.Sprint(body["media_ids"]) != "[med_1]" || fmt.Sprint(body["quick_replies"]) != "[Yes No]" {
+		t.Fatalf("body = %v", body)
+	}
+}
+
+func TestInboxEditCommentPatchesText(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"id":"itm_1","text":"Fixed","editedAt":"2026-09-19T10:00:00Z","canEdit":true}}`)
+	})
+
+	item, err := client.Inbox.EditComment(context.Background(), "itm_1", "Fixed")
+	if err != nil {
+		t.Fatalf("Inbox.EditComment: %v", err)
+	}
+	if method != "PATCH" || path != "/inbox/itm_1" || len(body) != 1 || body["text"] != "Fixed" {
+		t.Fatalf("%s %s %v", method, path, body)
+	}
+	if item.EditedAt.IsZero() || !item.CanEdit {
+		t.Fatalf("item = %+v", item)
+	}
+}
+
+func TestInboxLikeUnlikePinUnpinPostToTheirPaths(t *testing.T) {
+	var paths []string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		_, _ = io.WriteString(w, `{"data":{"id":"itm_1","liked":true,"pinned":true,"canLike":true,"canPin":true}}`)
+	})
+
+	ctx := context.Background()
+	item, err := client.Inbox.Like(ctx, "itm_1")
+	if err != nil || !item.Liked || !item.CanLike {
+		t.Fatalf("Inbox.Like: %+v, %v", item, err)
+	}
+	if _, err := client.Inbox.Unlike(ctx, "itm_1"); err != nil {
+		t.Fatalf("Inbox.Unlike: %v", err)
+	}
+	if item, err = client.Inbox.Pin(ctx, "itm_1"); err != nil || !item.Pinned || !item.CanPin {
+		t.Fatalf("Inbox.Pin: %+v, %v", item, err)
+	}
+	if _, err := client.Inbox.Unpin(ctx, "itm_1"); err != nil {
+		t.Fatalf("Inbox.Unpin: %v", err)
+	}
+	want := "[POST /inbox/itm_1/like POST /inbox/itm_1/unlike POST /inbox/itm_1/pin POST /inbox/itm_1/unpin]"
+	if fmt.Sprint(paths) != want {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
+func TestInboxReactSendsNullToRemove(t *testing.T) {
+	var raw []string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		raw = append(raw, string(b))
+		_, _ = io.WriteString(w, `{"data":{"id":"itm_1","reaction":"❤️","canReact":true}}`)
+	})
+
+	ctx := context.Background()
+	item, err := client.Inbox.React(ctx, "itm_1", String("❤️"))
+	if err != nil || item.Reaction != "❤️" || !item.CanReact {
+		t.Fatalf("Inbox.React: %+v, %v", item, err)
+	}
+	if _, err := client.Inbox.React(ctx, "itm_1", nil); err != nil {
+		t.Fatalf("Inbox.React(nil): %v", err)
+	}
+	if raw[0] != `{"reaction":"❤️"}` || raw[1] != `{"reaction":null}` {
+		t.Fatalf("bodies = %v", raw)
+	}
+}
+
+func TestInboxStartConversationSendsSnakeCaseBody(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"conversationId":"conv_2","item":{"id":"itm_9","type":"dm"}}}`)
+	})
+
+	started, err := client.Inbox.StartConversation(context.Background(), &StartInboxConversationRequest{
+		CommentID: "itm_1",
+		Text:      "Sent you the details",
+		MediaIDs:  []string{"med_1"},
+	})
+	if err != nil {
+		t.Fatalf("Inbox.StartConversation: %v", err)
+	}
+	if method != "POST" || path != "/inbox/conversations" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["comment_id"] != "itm_1" || body["text"] != "Sent you the details" || fmt.Sprint(body["media_ids"]) != "[med_1]" {
+		t.Fatalf("body = %v", body)
+	}
+	if _, present := body["handle"]; present {
+		t.Fatalf("handle sent empty: %v", body)
+	}
+	if started.ConversationID != "conv_2" || started.Item == nil || started.Item.Type != InboxTypeDM {
+		t.Fatalf("started = %+v", started)
+	}
+}
+
+func TestInboxSetTypingAndAccountsReadCanStartConversation(t *testing.T) {
+	var path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		if r.Method == "GET" {
+			_, _ = io.WriteString(w, `{"data":[{"id":"acc_1","canStartConversation":true}]}`)
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"typing":false}}`)
+	})
+
+	ctx := context.Background()
+	typing, err := client.Inbox.SetTyping(ctx, "conv_1", "acc_1", false)
+	if err != nil || typing {
+		t.Fatalf("Inbox.SetTyping: %v, %v", typing, err)
+	}
+	if path != "/inbox/conversations/conv_1/typing" || body["account_id"] != "acc_1" || body["on"] != false {
+		t.Fatalf("%s %v", path, body)
+	}
+	accounts, err := client.Inbox.Accounts(ctx, "")
+	if err != nil || len(accounts) != 1 || !accounts[0].CanStartConversation {
+		t.Fatalf("Inbox.Accounts: %+v, %v", accounts, err)
 	}
 }
 
