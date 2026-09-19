@@ -195,6 +195,50 @@ err := client.Posts.Each(ctx, &fopost.ListPostsParams{WorkspaceID: workspace.ID}
 
 Zero-valued parameters are not sent, so the API applies its own defaults.
 
+## Analytics
+
+```go
+// How long a post keeps earning, from the repeated readings of each post
+decay, err := client.Analytics.Decay(ctx, &fopost.AnalyticsParams{Days: 30})
+fmt.Println(decay.HalfLifeBucket) // e.g. "1h_3h"
+
+// Whether posting more earned more
+cadence, err := client.Analytics.Frequency(ctx, &fopost.AnalyticsParams{Days: 90})
+if cadence.Best != nil {
+    fmt.Println(cadence.Best.Label) // e.g. "3-5 a week"
+}
+
+// Every reading held for one post, with what moved between them
+timeline, err := client.Analytics.Timeline(ctx, post.ID)
+
+// Mirror the metrics into your own store, without refetching everything
+cursor := ""
+for {
+    page, err := client.Analytics.Changes(ctx, &fopost.MetricChangesParams{Since: cursor})
+    if err != nil {
+        return err
+    }
+    save(page.Changes)
+    if !page.HasMore {
+        break
+    }
+    cursor = page.Cursor.String()
+}
+
+// Refresh one post now instead of waiting for the next collection run
+_, err = client.Analytics.CollectPost(ctx, post.ID)
+
+// Posts on the account that never went out through FoPost
+native, err := client.Analytics.NativePosts(ctx, accounts[0].ID, nil)
+```
+
+A post is addressed by its FoPost id or by its permalink, so a post made by
+hand on the network works the same way:
+
+```go
+client.Analytics.Timeline(ctx, "https://x.com/acme/status/1")
+```
+
 ## Configuration
 
 ```go
@@ -261,7 +305,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Communities` | `List`, `Sync`, `Search`, `Add`, `Remove`                                                                                                                         |
 | `Labels`      | `List`, `Get`, `Create`, `Update`, `Delete`                                                                                                                       |
 | `Webhooks`    | `List`, `Create`, `Update`, `Delete`, `Test`                                                                                                                      |
-| `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`                                                           |
+| `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`, `Decay`, `Frequency`, `Timeline`, `Changes`, `CollectPost`, `NativePosts` |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
 | `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply` |
