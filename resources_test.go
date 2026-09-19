@@ -1079,3 +1079,53 @@ func TestAccountsTelegramBotCommandsRoutes(t *testing.T) {
 		t.Fatalf("delete: %v %s %s %+v", err, method, path, cleared)
 	}
 }
+
+func TestAccountsSlackRoutes(t *testing.T) {
+	var method, path, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/channels"):
+			_, _ = io.WriteString(w, `{"data":[{"id":"C1","name":"general","is_private":false,"is_member":true,"is_current":true}]}`)
+		case strings.HasSuffix(r.URL.Path, "/members"):
+			_, _ = io.WriteString(w, `{"data":[{"id":"U1","name":"sam","real_name":"Sam Doe","display_name":null,"avatar":null,"is_bot":false}]}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":{"username":"Launch Bot","icon_url":null,"icon_emoji":":rocket:"}}`)
+		}
+	})
+	ctx := context.Background()
+
+	channels, err := client.Accounts.ListSlackChannels(ctx, "acc_1")
+	if err != nil || method != "GET" || path != "/accounts/acc_1/slack/channels" || len(channels) != 1 || !channels[0].IsCurrent {
+		t.Fatalf("channels: %v %s %s %+v", err, method, path, channels)
+	}
+
+	members, err := client.Accounts.ListSlackMembers(ctx, "acc_1")
+	if err != nil || path != "/accounts/acc_1/slack/members" || len(members) != 1 || *members[0].RealName != "Sam Doe" || members[0].DisplayName != nil {
+		t.Fatalf("members: %v %s %+v", err, path, members)
+	}
+
+	identity, err := client.Accounts.GetSlackIdentity(ctx, "acc_1")
+	if err != nil || method != "GET" || path != "/accounts/acc_1/slack/identity" || *identity.IconEmoji != ":rocket:" || identity.IconURL != nil {
+		t.Fatalf("identity: %v %s %s %+v", err, method, path, identity)
+	}
+
+	_, err = client.Accounts.UpdateSlackIdentity(ctx, "acc_1", &UpdateSlackIdentityRequest{Username: String("Launch Bot"), IconURL: String("")})
+	if err != nil || method != "PATCH" || path != "/accounts/acc_1/slack/identity" || raw != `{"icon_url":null,"username":"Launch Bot"}` {
+		t.Fatalf("update: %v %s %s %s", err, method, path, raw)
+	}
+}
+
+func TestAccountsSlackWebhookConnectionConflict(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":"webhook_connection","message":"Reconnect with the Slack app"}`)
+	})
+
+	_, err := client.Accounts.ListSlackChannels(context.Background(), "acc_1")
+	if !IsConflict(err) || CodeOf(err) != "webhook_connection" {
+		t.Fatalf("err = %v", err)
+	}
+}

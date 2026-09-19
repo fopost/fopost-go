@@ -2,6 +2,7 @@ package fopost
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 )
 
@@ -382,6 +383,105 @@ func (s *AccountsService) SetTelegramBotCommands(ctx context.Context, id string,
 func (s *AccountsService) DeleteTelegramBotCommands(ctx context.Context, id string) (*TelegramBotCommands, error) {
 	out := &TelegramBotCommands{}
 	if err := s.client.json(ctx, "DELETE", "/accounts/"+url.PathEscape(id)+"/telegram/commands", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SlackChannel is a channel a Slack account can post to.
+type SlackChannel struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	IsPrivate bool   `json:"is_private"`
+	// IsMember reports whether the bot is in the channel.
+	IsMember bool `json:"is_member"`
+	// IsCurrent marks the channel the account posts to.
+	IsCurrent bool `json:"is_current"`
+}
+
+// SlackMember is a person in the connected Slack workspace. Pass ID as the
+// handle to start a DM.
+type SlackMember struct {
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	RealName    *string `json:"real_name"`
+	DisplayName *string `json:"display_name"`
+	Avatar      *string `json:"avatar"`
+	IsBot       bool    `json:"is_bot"`
+}
+
+// SlackIdentity is the name and icon a Slack account posts under. Nil fields
+// fall back to the app's own.
+type SlackIdentity struct {
+	Username  *string `json:"username"`
+	IconURL   *string `json:"icon_url"`
+	IconEmoji *string `json:"icon_emoji"`
+}
+
+// UpdateSlackIdentityRequest is the body of UpdateSlackIdentity. A nil field
+// keeps its value and a pointer to "" clears it. Set IconURL or IconEmoji, not
+// both; setting one clears the other.
+type UpdateSlackIdentityRequest struct {
+	// Username is 1-80 characters.
+	Username *string
+	// IconURL is an http(s) image URL.
+	IconURL *string
+	// IconEmoji is an emoji code such as ":rocket:".
+	IconEmoji *string
+}
+
+// MarshalJSON omits nil fields and sends "" as null.
+func (r UpdateSlackIdentityRequest) MarshalJSON() ([]byte, error) {
+	body := map[string]any{}
+	for key, value := range map[string]*string{"username": r.Username, "icon_url": r.IconURL, "icon_emoji": r.IconEmoji} {
+		if value == nil {
+			continue
+		}
+		if *value == "" {
+			body[key] = nil
+		} else {
+			body[key] = *value
+		}
+	}
+	return json.Marshal(body)
+}
+
+// ListSlackChannels returns the channels a Slack account can post to: every
+// public channel, and private ones the app was invited to. A 409 with code
+// "webhook_connection" means the account posts through a webhook.
+func (s *AccountsService) ListSlackChannels(ctx context.Context, id string) ([]SlackChannel, error) {
+	var out []SlackChannel
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/slack/channels", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListSlackMembers returns the people in a Slack account's workspace.
+func (s *AccountsService) ListSlackMembers(ctx context.Context, id string) ([]SlackMember, error) {
+	var out []SlackMember
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/slack/members", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetSlackIdentity returns the name and icon a Slack account posts under.
+func (s *AccountsService) GetSlackIdentity(ctx context.Context, id string) (*SlackIdentity, error) {
+	out := &SlackIdentity{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/slack/identity", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateSlackIdentity sets the name and icon a Slack account posts under.
+func (s *AccountsService) UpdateSlackIdentity(ctx context.Context, id string, body *UpdateSlackIdentityRequest) (*SlackIdentity, error) {
+	if body == nil {
+		body = &UpdateSlackIdentityRequest{}
+	}
+	out := &SlackIdentity{}
+	if err := s.client.json(ctx, "PATCH", "/accounts/"+url.PathEscape(id)+"/slack/identity", body, nil, out); err != nil {
 		return nil, err
 	}
 	return out, nil
