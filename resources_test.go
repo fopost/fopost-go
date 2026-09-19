@@ -1129,3 +1129,69 @@ func TestAccountsSlackWebhookConnectionConflict(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestRedditRoutes(t *testing.T) {
+	var method, path, query, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/reddit/subreddits"):
+			_, _ = io.WriteString(w, `{"data":[{"name":"webdev","title":"Web Development","subscribers":2000000,"over18":false,"canPost":true,"flairEnabled":true,"iconUrl":null,"isDefault":true}]}`)
+		case strings.HasSuffix(r.URL.Path, "/rules"):
+			_, _ = io.WriteString(w, `{"data":{"subreddit":"webdev","rules":[{"name":"No self promotion","description":"Keep it useful","appliesTo":"link"}]}}`)
+		case strings.HasSuffix(r.URL.Path, "/reddit/flairs"):
+			_, _ = io.WriteString(w, `{"data":{"subreddit":"webdev","flairs":[{"id":"flair-1","text":"Showoff Saturday","editable":false}]}}`)
+		case strings.HasSuffix(r.URL.Path, "/default-subreddit"):
+			_, _ = io.WriteString(w, `{"data":{"subreddit":null}}`)
+		case strings.HasSuffix(r.URL.Path, "/validate/subreddit"):
+			_, _ = io.WriteString(w, `{"data":{"subreddit":"webdev","exists":true,"can_post":true,"over_18":false,"flair_enabled":true,"ok":true}}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":{"id":"i_1","platform":"reddit","vote":"down","canVote":true}}`)
+		}
+	})
+	ctx := context.Background()
+
+	subreddits, err := client.Accounts.ListRedditSubreddits(ctx, "acc_1")
+	if err != nil || method != "GET" || path != "/accounts/acc_1/reddit/subreddits" || len(subreddits) != 1 || !subreddits[0].IsDefault {
+		t.Fatalf("subreddits: %v %s %s %+v", err, method, path, subreddits)
+	}
+
+	rules, err := client.Accounts.ListRedditSubredditRules(ctx, "acc_1", "webdev")
+	if err != nil || path != "/accounts/acc_1/reddit/subreddits/webdev/rules" || len(rules.Rules) != 1 || rules.Rules[0].AppliesTo != "link" {
+		t.Fatalf("rules: %v %s %+v", err, path, rules)
+	}
+
+	flairs, err := client.Accounts.ListRedditFlairs(ctx, "acc_1", "webdev")
+	if err != nil || path != "/accounts/acc_1/reddit/flairs" || query != "subreddit=webdev" || flairs.Flairs[0].ID != "flair-1" {
+		t.Fatalf("flairs: %v %s %s %+v", err, path, query, flairs)
+	}
+
+	def, err := client.Accounts.SetRedditDefaultSubreddit(ctx, "acc_1", "")
+	if err != nil || method != "PUT" || raw != `{"subreddit":null}` || def.Subreddit != "" {
+		t.Fatalf("default: %v %s %s %+v", err, method, raw, def)
+	}
+
+	check, err := client.Validate.Subreddit(ctx, "acc_1", "webdev")
+	if err != nil || path != "/validate/subreddit" || query != "account_id=acc_1&name=webdev" || !check.OK {
+		t.Fatalf("check: %v %s %s %+v", err, path, query, check)
+	}
+
+	item, err := client.Inbox.Vote(ctx, "i_1", "down")
+	if err != nil || method != "POST" || path != "/inbox/i_1/vote" || raw != `{"direction":"down"}` || item.Vote != "down" || !item.CanVote {
+		t.Fatalf("vote: %v %s %s %s %+v", err, method, path, raw, item)
+	}
+}
+
+func TestRedditStaleGrantIsAConflict(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":"reconnect_required","message":"Reconnect this account"}`)
+	})
+
+	_, err := client.Accounts.ListRedditSubreddits(context.Background(), "acc_1")
+	if !IsConflict(err) || CodeOf(err) != "reconnect_required" {
+		t.Fatalf("err = %v", err)
+	}
+}

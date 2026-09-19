@@ -1,6 +1,9 @@
 package fopost
 
-import "context"
+import (
+	"context"
+	"net/url"
+)
 
 // ValidateService checks content against platform rules without creating a
 // post. Nothing is stored server-side; every method needs the posts scope.
@@ -94,6 +97,30 @@ func (s *ValidateService) Media(ctx context.Context, fileURL string) (*ValidateM
 	out := &ValidateMediaResult{}
 	body := map[string]string{"url": fileURL}
 	if err := s.client.json(ctx, "POST", "/validate/media", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SubredditCheck is the verdict on one subreddit. OK is true when it exists and
+// takes a post from the named account.
+type SubredditCheck struct {
+	Subreddit    string `json:"subreddit"`
+	Exists       bool   `json:"exists"`
+	CanPost      bool   `json:"can_post"`
+	Over18       bool   `json:"over_18"`
+	FlairEnabled bool   `json:"flair_enabled"`
+	OK           bool   `json:"ok"`
+}
+
+// Subreddit reports whether a subreddit exists and takes a post from a
+// connected Reddit account. The check runs with that account's own token, so
+// accountID is required. A private, banned or missing subreddit answers 200
+// with Exists false rather than an error.
+func (s *ValidateService) Subreddit(ctx context.Context, accountID, name string) (*SubredditCheck, error) {
+	out := &SubredditCheck{}
+	query := url.Values{"account_id": {accountID}, "name": {name}}
+	if err := s.client.json(ctx, "GET", "/validate/subreddit", nil, query, out); err != nil {
 		return nil, err
 	}
 	return out, nil

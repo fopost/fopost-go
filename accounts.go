@@ -24,6 +24,9 @@ type Account struct {
 	// HealthStatus is one of the Health constants.
 	HealthStatus    string `json:"healthStatus"`
 	LastHealthCheck Time   `json:"lastHealthCheck"`
+	// ReconnectRequired is true when the account was connected before a
+	// permission it now needs was asked for. Reconnecting it is the fix.
+	ReconnectRequired bool `json:"reconnectRequired"`
 }
 
 // AccountDetail adds the owning workspace to an account.
@@ -444,6 +447,106 @@ func (r UpdateSlackIdentityRequest) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(body)
+}
+
+// RedditSubreddit is a subreddit the account is in, or its own profile page.
+type RedditSubreddit struct {
+	// Name carries no "r/" prefix.
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Subscribers int64  `json:"subscribers"`
+	Over18      bool   `json:"over18"`
+	// CanPost is false where the account may read but not submit.
+	CanPost bool `json:"canPost"`
+	// FlairEnabled reports whether the subreddit offers post flairs at all.
+	FlairEnabled bool   `json:"flairEnabled"`
+	IconURL      string `json:"iconUrl"`
+	// IsDefault marks where posts go when a post names no subreddit.
+	IsDefault bool `json:"isDefault"`
+}
+
+// RedditSubredditRule is one rule a subreddit publishes. AppliesTo is "link",
+// "comment" or "all".
+type RedditSubredditRule struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AppliesTo   string `json:"appliesTo"`
+}
+
+// RedditSubredditRules is a subreddit's rules, in its own order.
+type RedditSubredditRules struct {
+	Subreddit string                `json:"subreddit"`
+	Rules     []RedditSubredditRule `json:"rules"`
+}
+
+// RedditFlair is a post flair, valid only in the subreddit it came from.
+type RedditFlair struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
+	// Editable reports whether the label may be replaced with your own text.
+	Editable bool `json:"editable"`
+}
+
+// RedditFlairs is the post flairs one subreddit offers.
+type RedditFlairs struct {
+	Subreddit string        `json:"subreddit"`
+	Flairs    []RedditFlair `json:"flairs"`
+}
+
+// RedditDefaultSubreddit is where posts go when a post names none. An empty
+// Subreddit means the account's own profile page.
+type RedditDefaultSubreddit struct {
+	Subreddit string `json:"subreddit"`
+}
+
+// ListRedditSubreddits returns the subreddits a Reddit account is in, busiest
+// first, plus its own profile page. A 409 with code "reconnect_required" means
+// the grant is short of a permission this read needs.
+func (s *AccountsService) ListRedditSubreddits(ctx context.Context, id string) ([]RedditSubreddit, error) {
+	var out []RedditSubreddit
+	path := "/accounts/" + url.PathEscape(id) + "/reddit/subreddits"
+	if err := s.client.json(ctx, "GET", path, nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListRedditSubredditRules returns the rules a subreddit publishes, in its own
+// order. Show them before publishing.
+func (s *AccountsService) ListRedditSubredditRules(ctx context.Context, id, subreddit string) (*RedditSubredditRules, error) {
+	out := &RedditSubredditRules{}
+	path := "/accounts/" + url.PathEscape(id) + "/reddit/subreddits/" + url.PathEscape(subreddit) + "/rules"
+	if err := s.client.json(ctx, "GET", path, nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListRedditFlairs returns the post flairs one subreddit offers. A flair id is
+// valid only there, and one from elsewhere fails preflight.
+func (s *AccountsService) ListRedditFlairs(ctx context.Context, id, subreddit string) (*RedditFlairs, error) {
+	out := &RedditFlairs{}
+	path := "/accounts/" + url.PathEscape(id) + "/reddit/flairs"
+	query := url.Values{"subreddit": {subreddit}}
+	if err := s.client.json(ctx, "GET", path, nil, query, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetRedditDefaultSubreddit sets where posts from this account go when a post
+// names none. An empty subreddit falls back to the account's own profile page.
+func (s *AccountsService) SetRedditDefaultSubreddit(ctx context.Context, id, subreddit string) (*RedditDefaultSubreddit, error) {
+	out := &RedditDefaultSubreddit{}
+	body := map[string]any{"subreddit": nil}
+	if subreddit != "" {
+		body["subreddit"] = subreddit
+	}
+	path := "/accounts/" + url.PathEscape(id) + "/reddit/default-subreddit"
+	if err := s.client.json(ctx, "PUT", path, body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ListSlackChannels returns the channels a Slack account can post to: every

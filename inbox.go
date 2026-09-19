@@ -110,7 +110,10 @@ type InboxItem struct {
 	CanReply bool `json:"canReply"`
 	Hidden   bool `json:"hidden"`
 	Liked    bool `json:"liked"`
-	Pinned   bool `json:"pinned"`
+	// Vote is how the account voted where the network ranks by votes: "up",
+	// "down" or empty.
+	Vote   string `json:"vote"`
+	Pinned bool   `json:"pinned"`
 	// Reaction is our reaction on a DM, empty when there is none.
 	Reaction string `json:"reaction"`
 	EditedAt Time   `json:"editedAt"`
@@ -118,6 +121,8 @@ type InboxItem struct {
 	// CanDelete covers a comment someone left and our own reply.
 	CanDelete bool `json:"canDelete"`
 	CanLike   bool `json:"canLike"`
+	// CanVote reports that the network ranks by votes, so a down vote exists.
+	CanVote bool `json:"canVote"`
 	// CanPin and CanEdit apply to our own comment only.
 	CanPin        bool `json:"canPin"`
 	CanEdit       bool `json:"canEdit"`
@@ -570,6 +575,14 @@ func (s *InboxService) action(ctx context.Context, id, action string, body any) 
 // the `publish` scope.
 func (s *InboxService) Like(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "like", nil)
+}
+
+// Vote votes an item up or down where the network ranks by votes (Reddit).
+// direction is "up", "down", or "none" to take an earlier vote back. An upvote
+// is the same call Like makes, so Liked moves with it. Also needs the
+// `publish` scope.
+func (s *InboxService) Vote(ctx context.Context, id, direction string) (*InboxItem, error) {
+	return s.action(ctx, id, "vote", map[string]string{"direction": direction})
 }
 
 // Unlike removes our like. Also needs the `publish` scope.
