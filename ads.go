@@ -7,8 +7,9 @@ import (
 
 // AdsService covers Meta ads: boosts and ads created through FoPost, the ad
 // connections they run on, audiences, targeting search and lead forms. Every
-// method needs the `ads` scope; Boost, Create, SetStatus and Delete spend
-// money and also need `publish`.
+// method needs the `ads` scope; Boost, Create, SetStatus, Delete, the create,
+// update, delete and duplicate calls on campaigns, ad sets and network ads, and
+// SetStatuses spend money and also need `publish`.
 type AdsService struct{ client *Client }
 
 // Ad goals.
@@ -105,6 +106,7 @@ type AdCreative struct {
 	Headline       string `json:"headline,omitempty"`
 	DestinationURL string `json:"destinationUrl,omitempty"`
 	MediaURL       string `json:"mediaUrl,omitempty"`
+	URLTags        string `json:"urlTags,omitempty"`
 }
 
 // Ad is a boost or an ad created through FoPost.
@@ -418,7 +420,10 @@ type CreateAdRequest struct {
 	DestinationURL string `json:"destinationUrl,omitempty"`
 	// MediaURL is a media library asset url.
 	MediaURL string `json:"mediaUrl,omitempty"`
-	Paused   *bool  `json:"paused,omitempty"`
+	// URLTags is a query string appended to every link in the ad, e.g.
+	// `utm_source=meta&utm_medium=paid`.
+	URLTags string `json:"urlTags,omitempty"`
+	Paused  *bool  `json:"paused,omitempty"`
 }
 
 // Create makes an ad from scratch. Needs the `publish` scope as well as `ads`.
@@ -621,4 +626,760 @@ func workspaceQuery(workspaceID string) url.Values {
 	q := newQuery()
 	q.str("workspace_id", workspaceID)
 	return q.values()
+}
+
+// Object levels for SetStatuses.
+const (
+	AdLevelCampaign = "campaign"
+	AdLevelAdSet    = "ad_set"
+	AdLevelAd       = "ad"
+)
+
+// Insights breakdowns.
+const (
+	InsightsByAge       = "age"
+	InsightsByGender    = "gender"
+	InsightsByPlacement = "placement"
+	InsightsByCountry   = "country"
+)
+
+// Creative formats for CreateCreative.
+const (
+	CreativeImage    = "image"
+	CreativeVideo    = "video"
+	CreativeCarousel = "carousel"
+)
+
+// AdObjectParams names the connection a Meta object is read or changed
+// through. WorkspaceID is required on writes.
+type AdObjectParams struct {
+	WorkspaceID  string
+	ConnectionID string
+}
+
+func (p *AdObjectParams) query() url.Values {
+	q := newQuery()
+	if p != nil {
+		q.str("workspace_id", p.WorkspaceID)
+		q.str("connection_id", p.ConnectionID)
+	}
+	return q.values()
+}
+
+// Campaign is a Meta campaign, read live and never stored. Status is Meta's
+// `ACTIVE`, `PAUSED`, `DELETED` or `ARCHIVED`.
+type Campaign struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Status          string `json:"status"`
+	EffectiveStatus string `json:"effectiveStatus"`
+	Objective       string `json:"objective"`
+	// BudgetMinor is nil when the budget lives on the ad sets.
+	BudgetMinor *int   `json:"budgetMinor"`
+	BudgetType  string `json:"budgetType"`
+	CreatedAt   Time   `json:"createdAt"`
+}
+
+// AdSet is a Meta ad set, read live and never stored.
+type AdSet struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	CampaignID       string `json:"campaignId"`
+	Status           string `json:"status"`
+	EffectiveStatus  string `json:"effectiveStatus"`
+	BudgetMinor      *int   `json:"budgetMinor"`
+	BudgetType       string `json:"budgetType"`
+	EndAt            Time   `json:"endAt"`
+	OptimizationGoal string `json:"optimizationGoal"`
+	CreatedAt        Time   `json:"createdAt"`
+}
+
+// NetworkAd is an ad inside a Meta ad set, read live and never stored.
+type NetworkAd struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	CampaignID      string `json:"campaignId"`
+	AdSetID         string `json:"adSetId"`
+	CreativeID      string `json:"creativeId"`
+	Status          string `json:"status"`
+	EffectiveStatus string `json:"effectiveStatus"`
+	CreatedAt       Time   `json:"createdAt"`
+}
+
+// TreeAdSet is an ad set with its ads.
+type TreeAdSet struct {
+	AdSet
+	Ads []NetworkAd `json:"ads"`
+}
+
+// TreeCampaign is a campaign with its ad sets.
+type TreeCampaign struct {
+	Campaign
+	AdSets []TreeAdSet `json:"adSets"`
+}
+
+// AdAccountTree is every campaign on an ad account with its ad sets and ads.
+type AdAccountTree struct {
+	AdAccountID string         `json:"adAccountId"`
+	Currency    string         `json:"currency"`
+	WorkspaceID string         `json:"workspaceId"`
+	Campaigns   []TreeCampaign `json:"campaigns"`
+}
+
+// Tree returns an ad account's campaigns, ad sets and ads, whoever made them.
+func (s *AdsService) Tree(ctx context.Context, adAccountID string, params *AdObjectParams) (*AdAccountTree, error) {
+	out := &AdAccountTree{}
+	if err := s.client.json(ctx, "GET", "/ads/accounts/"+url.PathEscape(adAccountID)+"/tree", nil, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CreateCampaignRequest is the body of CreateCampaign. The campaign starts
+// paused unless Paused is Bool(false).
+type CreateCampaignRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	// AdAccountID is `act_…`.
+	AdAccountID string `json:"adAccountId"`
+	Name        string `json:"name"`
+	// Goal is one of the AdGoal constants.
+	Goal   string `json:"goal"`
+	Paused *bool  `json:"paused,omitempty"`
+}
+
+// UpdateCampaignRequest is the body of UpdateCampaign. Status is
+// AdStatusActive or AdStatusPaused.
+type UpdateCampaignRequest struct {
+	Name   string `json:"name,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+// CreateCampaign creates a campaign. Needs `publish` as well as `ads`.
+func (s *AdsService) CreateCampaign(ctx context.Context, body *CreateCampaignRequest) (*Campaign, error) {
+	out := &Campaign{}
+	if err := s.client.json(ctx, "POST", "/ads/campaigns", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Campaign returns one campaign.
+func (s *AdsService) Campaign(ctx context.Context, id string, params *AdObjectParams) (*Campaign, error) {
+	out := &Campaign{}
+	if err := s.client.json(ctx, "GET", "/ads/campaigns/"+url.PathEscape(id), nil, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateCampaign renames, pauses or resumes a campaign. Needs `publish` as
+// well as `ads`.
+func (s *AdsService) UpdateCampaign(ctx context.Context, id string, params *AdObjectParams, body *UpdateCampaignRequest) (*Campaign, error) {
+	out := &Campaign{}
+	if err := s.client.json(ctx, "PATCH", "/ads/campaigns/"+url.PathEscape(id), body, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteCampaign deletes a campaign on Meta. Needs `publish` as well as `ads`.
+func (s *AdsService) DeleteCampaign(ctx context.Context, id string, params *AdObjectParams) error {
+	return s.client.Do(ctx, "DELETE", "/ads/campaigns/"+url.PathEscape(id), nil, params.query(), nil)
+}
+
+// DuplicateCampaign copies a campaign and returns the copy's Meta id. The
+// copy starts paused unless paused is Bool(false). Needs `publish` as well as
+// `ads`.
+func (s *AdsService) DuplicateCampaign(ctx context.Context, id string, params *AdObjectParams, paused *bool) (string, error) {
+	return s.duplicate(ctx, "/ads/campaigns/"+url.PathEscape(id)+"/duplicate", params, paused)
+}
+
+// CreateAdSetRequest is the body of CreateAdSet. The ad set starts paused
+// unless Paused is Bool(false).
+type CreateAdSetRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	CampaignID   string `json:"campaignId"`
+	// PageID is the Page the ads in this set run as.
+	PageID string `json:"pageId"`
+	Name   string `json:"name"`
+	// Goal is one of the AdGoal constants.
+	Goal      string      `json:"goal"`
+	Budget    AdBudget    `json:"budget"`
+	Targeting AdTargeting `json:"targeting"`
+	Paused    *bool       `json:"paused,omitempty"`
+}
+
+// UpdateAdSetRequest is the body of UpdateAdSet. BudgetMinor keeps the budget
+// type set at creation.
+type UpdateAdSetRequest struct {
+	Name        string       `json:"name,omitempty"`
+	Status      string       `json:"status,omitempty"`
+	BudgetMinor *int         `json:"budgetMinor,omitempty"`
+	EndAt       *Time        `json:"endAt,omitempty"`
+	Targeting   *AdTargeting `json:"targeting,omitempty"`
+}
+
+// CreateAdSet creates an ad set in a campaign. Needs `publish` as well as
+// `ads`.
+func (s *AdsService) CreateAdSet(ctx context.Context, body *CreateAdSetRequest) (*AdSet, error) {
+	out := &AdSet{}
+	if err := s.client.json(ctx, "POST", "/ads/ad-sets", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AdSet returns one ad set.
+func (s *AdsService) AdSet(ctx context.Context, id string, params *AdObjectParams) (*AdSet, error) {
+	out := &AdSet{}
+	if err := s.client.json(ctx, "GET", "/ads/ad-sets/"+url.PathEscape(id), nil, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateAdSet changes an ad set's name, status, budget, end or targeting.
+// Needs `publish` as well as `ads`.
+func (s *AdsService) UpdateAdSet(ctx context.Context, id string, params *AdObjectParams, body *UpdateAdSetRequest) (*AdSet, error) {
+	out := &AdSet{}
+	if err := s.client.json(ctx, "PATCH", "/ads/ad-sets/"+url.PathEscape(id), body, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteAdSet deletes an ad set on Meta. Needs `publish` as well as `ads`.
+func (s *AdsService) DeleteAdSet(ctx context.Context, id string, params *AdObjectParams) error {
+	return s.client.Do(ctx, "DELETE", "/ads/ad-sets/"+url.PathEscape(id), nil, params.query(), nil)
+}
+
+// DuplicateAdSet copies an ad set and returns the copy's Meta id. Needs
+// `publish` as well as `ads`.
+func (s *AdsService) DuplicateAdSet(ctx context.Context, id string, params *AdObjectParams, paused *bool) (string, error) {
+	return s.duplicate(ctx, "/ads/ad-sets/"+url.PathEscape(id)+"/duplicate", params, paused)
+}
+
+// CreateNetworkAdRequest is the body of CreateNetworkAd. The ad starts paused
+// unless Paused is Bool(false).
+type CreateNetworkAdRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	AdSetID      string `json:"adSetId"`
+	// CreativeID is from CreateCreative or Creatives.
+	CreativeID string `json:"creativeId"`
+	Name       string `json:"name"`
+	Paused     *bool  `json:"paused,omitempty"`
+}
+
+// UpdateNetworkAdRequest is the body of UpdateNetworkAd.
+type UpdateNetworkAdRequest struct {
+	Name       string `json:"name,omitempty"`
+	Status     string `json:"status,omitempty"`
+	CreativeID string `json:"creativeId,omitempty"`
+}
+
+// CreateNetworkAd creates an ad inside an ad set. Unlike Create it builds no
+// campaign. Needs `publish` as well as `ads`.
+func (s *AdsService) CreateNetworkAd(ctx context.Context, body *CreateNetworkAdRequest) (*NetworkAd, error) {
+	out := &NetworkAd{}
+	if err := s.client.json(ctx, "POST", "/ads/ads", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// NetworkAd returns one ad by its Meta id.
+func (s *AdsService) NetworkAd(ctx context.Context, id string, params *AdObjectParams) (*NetworkAd, error) {
+	out := &NetworkAd{}
+	if err := s.client.json(ctx, "GET", "/ads/ads/"+url.PathEscape(id), nil, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateNetworkAd renames, pauses, resumes or swaps the creative of an ad.
+// Needs `publish` as well as `ads`.
+func (s *AdsService) UpdateNetworkAd(ctx context.Context, id string, params *AdObjectParams, body *UpdateNetworkAdRequest) (*NetworkAd, error) {
+	out := &NetworkAd{}
+	if err := s.client.json(ctx, "PATCH", "/ads/ads/"+url.PathEscape(id), body, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteNetworkAd deletes an ad on Meta. Needs `publish` as well as `ads`.
+func (s *AdsService) DeleteNetworkAd(ctx context.Context, id string, params *AdObjectParams) error {
+	return s.client.Do(ctx, "DELETE", "/ads/ads/"+url.PathEscape(id), nil, params.query(), nil)
+}
+
+// DuplicateNetworkAd copies an ad and returns the copy's Meta id. Needs
+// `publish` as well as `ads`.
+func (s *AdsService) DuplicateNetworkAd(ctx context.Context, id string, params *AdObjectParams, paused *bool) (string, error) {
+	return s.duplicate(ctx, "/ads/ads/"+url.PathEscape(id)+"/duplicate", params, paused)
+}
+
+func (s *AdsService) duplicate(ctx context.Context, path string, params *AdObjectParams, paused *bool) (string, error) {
+	var body any
+	if paused != nil {
+		body = map[string]bool{"paused": *paused}
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := s.client.json(ctx, "POST", path, body, params.query(), &out); err != nil {
+		return "", err
+	}
+	return out.ID, nil
+}
+
+// AdObjectRef names one campaign, ad set or ad for SetStatuses. Level is one
+// of the AdLevel constants.
+type AdObjectRef struct {
+	ID    string `json:"id"`
+	Level string `json:"level"`
+}
+
+// SetStatusesRequest is the body of SetStatuses: up to 50 objects.
+type SetStatusesRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	// Status is AdStatusActive or AdStatusPaused.
+	Status  string        `json:"status"`
+	Objects []AdObjectRef `json:"objects"`
+}
+
+// AdStatusResult is the outcome for one object of SetStatuses.
+type AdStatusResult struct {
+	ID    string `json:"id"`
+	Level string `json:"level"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+}
+
+// SetStatuses pauses or resumes many campaigns, ad sets and ads; each
+// succeeds or fails on its own. Needs `publish` as well as `ads`.
+func (s *AdsService) SetStatuses(ctx context.Context, body *SetStatusesRequest) ([]AdStatusResult, error) {
+	var out []AdStatusResult
+	if err := s.client.json(ctx, "POST", "/ads/status", body, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Creative is one ad creative on an ad account. Format is "image", "video",
+// "carousel", "post" or "other".
+type Creative struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Format       string `json:"format"`
+	Status       string `json:"status"`
+	Title        string `json:"title"`
+	Body         string `json:"body"`
+	Link         string `json:"link"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	CallToAction string `json:"callToAction"`
+	URLTags      string `json:"urlTags"`
+}
+
+// CreativesResult is an ad account's creative library.
+type CreativesResult struct {
+	Creatives   []Creative `json:"creatives"`
+	WorkspaceID string     `json:"workspaceId"`
+}
+
+// ListCreativesParams names the ad account Creatives reads.
+type ListCreativesParams struct {
+	WorkspaceID  string
+	ConnectionID string
+	// AdAccountID is `act_…`.
+	AdAccountID string
+}
+
+// Creatives returns an ad account's creative library.
+func (s *AdsService) Creatives(ctx context.Context, params *ListCreativesParams) (*CreativesResult, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("connection_id", params.ConnectionID)
+		q.str("ad_account_id", params.AdAccountID)
+	}
+	out := &CreativesResult{}
+	if err := s.client.json(ctx, "GET", "/ads/creatives", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CarouselCard is one card of a carousel creative. MediaURL is a library
+// image.
+type CarouselCard struct {
+	MediaURL       string `json:"mediaUrl"`
+	DestinationURL string `json:"destinationUrl,omitempty"`
+	Headline       string `json:"headline,omitempty"`
+	Description    string `json:"description,omitempty"`
+}
+
+// CreateCreativeRequest is the body of CreateCreative. Format is one of the
+// Creative constants: MediaURL is required for a video, Cards (2 to 10) for a
+// carousel.
+type CreateCreativeRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	// AdAccountID is `act_…`.
+	AdAccountID string `json:"adAccountId"`
+	PageID      string `json:"pageId"`
+	Name        string `json:"name"`
+	Format      string `json:"format"`
+	// Text is the primary text.
+	Text           string `json:"text"`
+	Headline       string `json:"headline,omitempty"`
+	DestinationURL string `json:"destinationUrl,omitempty"`
+	// CallToAction is Meta's button type, e.g. "SHOP_NOW"; "LEARN_MORE" when
+	// empty.
+	CallToAction string `json:"callToAction,omitempty"`
+	// URLTags is a query string appended to every link in the ad.
+	URLTags string `json:"urlTags,omitempty"`
+	// MediaURL is a media library asset url: the image, or the video.
+	MediaURL string `json:"mediaUrl,omitempty"`
+	// ThumbnailMediaURL is a video's poster frame, as a library image.
+	ThumbnailMediaURL string         `json:"thumbnailMediaUrl,omitempty"`
+	Cards             []CarouselCard `json:"cards,omitempty"`
+}
+
+// CreateCreative adds an image, video or carousel creative to an ad account.
+func (s *AdsService) CreateCreative(ctx context.Context, body *CreateCreativeRequest) (*Creative, error) {
+	out := &Creative{}
+	if err := s.client.json(ctx, "POST", "/ads/creatives", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Creative returns one creative.
+func (s *AdsService) Creative(ctx context.Context, id string, params *AdObjectParams) (*Creative, error) {
+	out := &Creative{}
+	if err := s.client.json(ctx, "GET", "/ads/creatives/"+url.PathEscape(id), nil, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteCreative deletes a creative on Meta.
+func (s *AdsService) DeleteCreative(ctx context.Context, id string, params *AdObjectParams) error {
+	return s.client.Do(ctx, "DELETE", "/ads/creatives/"+url.PathEscape(id), nil, params.query(), nil)
+}
+
+// UpdateAudienceRequest is the body of UpdateAudience.
+type UpdateAudienceRequest struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// Audience returns one audience.
+func (s *AdsService) Audience(ctx context.Context, id string, params *AdObjectParams) (*Audience, error) {
+	out := &Audience{}
+	if err := s.client.json(ctx, "GET", "/ads/audiences/"+url.PathEscape(id), nil, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateAudience renames an audience or changes its description.
+func (s *AdsService) UpdateAudience(ctx context.Context, id string, params *AdObjectParams, body *UpdateAudienceRequest) (*Audience, error) {
+	out := &Audience{}
+	if err := s.client.json(ctx, "PATCH", "/ads/audiences/"+url.PathEscape(id), body, params.query(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteAudience deletes an audience on Meta.
+func (s *AdsService) DeleteAudience(ctx context.Context, id string, params *AdObjectParams) error {
+	return s.client.Do(ctx, "DELETE", "/ads/audiences/"+url.PathEscape(id), nil, params.query(), nil)
+}
+
+// AddAudienceUsers adds emails to a custom audience, hashed before they leave
+// the API, and returns how many were sent to Meta.
+func (s *AdsService) AddAudienceUsers(ctx context.Context, id string, params *AdObjectParams, emails []string) (int, error) {
+	body := map[string][]string{"emails": emails}
+	var out struct {
+		Added int `json:"added"`
+	}
+	if err := s.client.json(ctx, "POST", "/ads/audiences/"+url.PathEscape(id)+"/users", body, params.query(), &out); err != nil {
+		return 0, err
+	}
+	return out.Added, nil
+}
+
+// ReachEstimateRequest is the body of EstimateReach.
+type ReachEstimateRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	// AdAccountID is `act_…`.
+	AdAccountID string      `json:"adAccountId"`
+	PageID      string      `json:"pageId"`
+	Targeting   AdTargeting `json:"targeting"`
+}
+
+// ReachEstimate is Meta's audience size range for a targeting. Ready is false
+// while Meta is still computing it.
+type ReachEstimate struct {
+	Lower *int `json:"lower"`
+	Upper *int `json:"upper"`
+	Ready bool `json:"ready"`
+}
+
+// EstimateReach returns how many people a targeting reaches.
+func (s *AdsService) EstimateReach(ctx context.Context, body *ReachEstimateRequest) (*ReachEstimate, error) {
+	out := &ReachEstimate{}
+	if err := s.client.json(ctx, "POST", "/ads/reach-estimate", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// InsightsMetrics are delivery numbers. SpendMinor is in the account
+// currency's minor units; CTR is clicks per impression, as a percentage.
+type InsightsMetrics struct {
+	Impressions int     `json:"impressions"`
+	Reach       int     `json:"reach"`
+	Clicks      int     `json:"clicks"`
+	SpendMinor  int     `json:"spendMinor"`
+	CTR         float64 `json:"ctr"`
+	Leads       int     `json:"leads"`
+}
+
+// InsightsBreakdownRow is one value of the requested breakdown.
+type InsightsBreakdownRow struct {
+	Key     string          `json:"key"`
+	Metrics InsightsMetrics `json:"metrics"`
+}
+
+// InsightsDay is one day of the timeline.
+type InsightsDay struct {
+	Date    string          `json:"date"`
+	Metrics InsightsMetrics `json:"metrics"`
+}
+
+// InsightsReport is an object's delivery over a date range. Totals is nil when
+// Meta has nothing for the range.
+type InsightsReport struct {
+	ObjectID    string                 `json:"objectId"`
+	Currency    string                 `json:"currency"`
+	Since       string                 `json:"since"`
+	Until       string                 `json:"until"`
+	BreakdownBy string                 `json:"breakdownBy"`
+	Totals      *InsightsMetrics       `json:"totals"`
+	Breakdown   []InsightsBreakdownRow `json:"breakdown"`
+	Timeline    []InsightsDay          `json:"timeline"`
+}
+
+// InsightsParams narrows Insights. ObjectID is an ad account (`act_…`),
+// campaign, ad set or ad; Since and Until are inclusive `YYYY-MM-DD` dates;
+// Breakdown is one of the InsightsBy constants; Daily adds the timeline.
+type InsightsParams struct {
+	WorkspaceID  string
+	ConnectionID string
+	ObjectID     string
+	Since        string
+	Until        string
+	Breakdown    string
+	Daily        *bool
+}
+
+// Insights returns delivery totals for any Meta object over a date range.
+func (s *AdsService) Insights(ctx context.Context, params *InsightsParams) (*InsightsReport, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("connection_id", params.ConnectionID)
+		q.str("object_id", params.ObjectID)
+		q.str("since", params.Since)
+		q.str("until", params.Until)
+		q.str("breakdown", params.Breakdown)
+		q.boolPtr("daily", params.Daily)
+	}
+	out := &InsightsReport{}
+	if err := s.client.json(ctx, "GET", "/ads/insights", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AdInsightsParams narrows AdInsights. Since and Until are inclusive
+// `YYYY-MM-DD` dates.
+type AdInsightsParams struct {
+	WorkspaceID string
+	Since       string
+	Until       string
+	Breakdown   string
+	Daily       *bool
+}
+
+// AdInsights returns delivery over a date range for a boost or ad created
+// through FoPost, by its FoPost id.
+func (s *AdsService) AdInsights(ctx context.Context, id string, params *AdInsightsParams) (*InsightsReport, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("since", params.Since)
+		q.str("until", params.Until)
+		q.str("breakdown", params.Breakdown)
+		q.boolPtr("daily", params.Daily)
+	}
+	out := &InsightsReport{}
+	if err := s.client.json(ctx, "GET", "/ads/"+url.PathEscape(id)+"/insights", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// LeadFormDetail is one lead form with its settings.
+type LeadFormDetail struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Status           string   `json:"status"`
+	LeadsCount       int      `json:"leadsCount"`
+	CreatedAt        Time     `json:"createdAt"`
+	Questions        []string `json:"questions"`
+	PageID           string   `json:"pageId"`
+	PrivacyPolicyURL string   `json:"privacyPolicyUrl"`
+	Locale           string   `json:"locale"`
+}
+
+// LeadFormParams names the Page a lead form lives on.
+type LeadFormParams struct {
+	WorkspaceID  string
+	ConnectionID string
+	PageID       string
+}
+
+// LeadForm returns one lead form.
+func (s *AdsService) LeadForm(ctx context.Context, formID string, params *LeadFormParams) (*LeadFormDetail, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("connection_id", params.ConnectionID)
+		q.str("page_id", params.PageID)
+	}
+	out := &LeadFormDetail{}
+	if err := s.client.json(ctx, "GET", "/ads/lead-forms/"+url.PathEscape(formID), nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ArchiveLeadForm stops a lead form collecting; its leads stay readable.
+func (s *AdsService) ArchiveLeadForm(ctx context.Context, formID string, params *LeadFormParams) (*LeadFormDetail, error) {
+	body := map[string]string{}
+	if params != nil {
+		body["workspaceId"] = params.WorkspaceID
+		body["connectionId"] = params.ConnectionID
+		body["pageId"] = params.PageID
+	}
+	out := &LeadFormDetail{}
+	if err := s.client.json(ctx, "POST", "/ads/lead-forms/"+url.PathEscape(formID)+"/archive", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FeedLead is one lead collected from a subscribed Page.
+type FeedLead struct {
+	ID string `json:"id"`
+	// LeadID is Meta's lead id.
+	LeadID       string      `json:"leadId"`
+	ConnectionID string      `json:"connectionId"`
+	PageID       string      `json:"pageId"`
+	FormID       string      `json:"formId"`
+	AdID         string      `json:"adId"`
+	AdName       string      `json:"adName"`
+	CampaignName string      `json:"campaignName"`
+	Platform     string      `json:"platform"`
+	IsOrganic    bool        `json:"isOrganic"`
+	Fields       []LeadField `json:"fields"`
+	SubmittedAt  Time        `json:"submittedAt"`
+	WorkspaceID  string      `json:"workspaceId"`
+}
+
+// LeadsFeedPage is one page of the leads feed. Pass NextCursor back as Cursor
+// for the next; it is empty on the last page.
+type LeadsFeedPage struct {
+	Leads      []FeedLead `json:"leads"`
+	NextCursor string     `json:"nextCursor"`
+}
+
+// LeadsFeedParams narrows LeadsFeed. Limit is 1 to 100.
+type LeadsFeedParams struct {
+	WorkspaceID string
+	FormID      string
+	PageID      string
+	Cursor      string
+	Limit       int
+}
+
+// LeadsFeed returns the leads collected from subscribed Pages, newest first.
+func (s *AdsService) LeadsFeed(ctx context.Context, params *LeadsFeedParams) (*LeadsFeedPage, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("form_id", params.FormID)
+		q.str("page_id", params.PageID)
+		q.str("cursor", params.Cursor)
+		q.num("limit", params.Limit)
+	}
+	out := &LeadsFeedPage{}
+	if err := s.client.json(ctx, "GET", "/ads/leads", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// LeadPage is a Page whose leads are collected into the feed.
+type LeadPage struct {
+	ConnectionID string `json:"connectionId"`
+	PageID       string `json:"pageId"`
+	PageName     string `json:"pageName"`
+	CreatedAt    Time   `json:"createdAt"`
+	WorkspaceID  string `json:"workspaceId"`
+}
+
+// LeadPages returns the Pages whose leads are collected.
+func (s *AdsService) LeadPages(ctx context.Context, workspaceID string) ([]LeadPage, error) {
+	var out []LeadPage
+	if err := s.client.json(ctx, "GET", "/ads/lead-pages", nil, workspaceQuery(workspaceID), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SubscribeLeadPageRequest is the body of SubscribeLeadPage.
+type SubscribeLeadPageRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	PageID       string `json:"pageId"`
+}
+
+// SubscribedLeadPage is a newly subscribed Page. Backfilled counts the recent
+// leads copied into the feed.
+type SubscribedLeadPage struct {
+	PageID     string `json:"pageId"`
+	Backfilled int    `json:"backfilled"`
+}
+
+// SubscribeLeadPage starts collecting a Page's leads and backfills its most
+// recent ones.
+func (s *AdsService) SubscribeLeadPage(ctx context.Context, body *SubscribeLeadPageRequest) (*SubscribedLeadPage, error) {
+	out := &SubscribedLeadPage{}
+	if err := s.client.json(ctx, "POST", "/ads/lead-pages", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UnsubscribeLeadPage stops collecting a Page's leads.
+func (s *AdsService) UnsubscribeLeadPage(ctx context.Context, pageID string, params *AdObjectParams) error {
+	return s.client.Do(ctx, "DELETE", "/ads/lead-pages/"+url.PathEscape(pageID), nil, params.query(), nil)
 }
