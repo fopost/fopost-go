@@ -1212,3 +1212,75 @@ func TestAccountsDiscordWebhookConnectionConflict(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestAccountsPlatformMetricsAsksForRawAndDecodesTheSet(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"platform":"facebook","account":{"fetched_at":"2026-09-20T02:00:00.000Z","metrics":[{"key":"page_daily_video_ad_break_earnings","label":"Ad Break Earnings","kind":"currency_usd","value":42.15},{"key":"page_impressions_paid","label":"Paid Impressions","kind":"count","value":1500}]},"post":{"external_post_id":"123_456","fetched_at":"2026-09-20T02:00:00.000Z","metrics":[]}}}`)
+	})
+
+	metrics, err := client.Accounts.PlatformMetrics(context.Background(), "acc_1")
+	if err != nil {
+		t.Fatalf("Accounts.PlatformMetrics: %v", err)
+	}
+	if path != "/accounts/acc_1/insights" {
+		t.Fatalf("path = %q", path)
+	}
+	if query != "raw=true" {
+		t.Fatalf("query = %q", query)
+	}
+	if metrics.Platform != "facebook" || len(metrics.Account.Metrics) != 2 {
+		t.Fatalf("metrics = %+v", metrics)
+	}
+	if metrics.Account.Metrics[0].Key != "page_daily_video_ad_break_earnings" {
+		t.Fatalf("first key = %q", metrics.Account.Metrics[0].Key)
+	}
+	if n, ok := metrics.Account.Metrics[0].Number(); !ok || n != 42.15 {
+		t.Fatalf("earnings = %v %v", n, ok)
+	}
+	if metrics.Post.ExternalPostID != "123_456" || len(metrics.Post.Metrics) != 0 {
+		t.Fatalf("post = %+v", metrics.Post)
+	}
+}
+
+func TestAccountsPlatformMetricsKeepsASeriesValueRaw(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"data":{"platform":"youtube","account":{"fetched_at":null,"metrics":[{"key":"daily_views","label":"Views by Day","kind":"series","value":[{"day":"2026-09-19","views":600}]}]},"post":{"external_post_id":null,"fetched_at":null,"metrics":[]}}}`)
+	})
+
+	metrics, err := client.Accounts.PlatformMetrics(context.Background(), "acc_1")
+	if err != nil {
+		t.Fatalf("Accounts.PlatformMetrics: %v", err)
+	}
+	row := metrics.Account.Metrics[0]
+	if _, ok := row.Number(); ok {
+		t.Fatal("a series must not decode as a number")
+	}
+	var points []struct {
+		Day   string `json:"day"`
+		Views int    `json:"views"`
+	}
+	if err := json.Unmarshal(row.Value, &points); err != nil {
+		t.Fatalf("unmarshal series: %v", err)
+	}
+	if len(points) != 1 || points[0].Views != 600 {
+		t.Fatalf("points = %+v", points)
+	}
+}
+
+func TestAccountsPlatformMetricsSurfacesAPendingGrant(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"error":"platform_metrics_unavailable","message":"google-business metrics are not available on this deployment yet."}`)
+	})
+
+	_, err := client.Accounts.PlatformMetrics(context.Background(), "acc_1")
+	apiErr, ok := APIError(err)
+	if !ok {
+		t.Fatalf("err = %v", err)
+	}
+	if apiErr.Status != http.StatusServiceUnavailable || apiErr.Code != "platform_metrics_unavailable" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
