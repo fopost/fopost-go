@@ -62,6 +62,7 @@ type Client struct {
 	Inbox         *InboxService
 	Ads           *AdsService
 	Validate      *ValidateService
+	Blogs         *BlogsService
 }
 
 // Option configures a Client.
@@ -155,6 +156,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Inbox = &InboxService{client: c}
 	c.Ads = &AdsService{client: c}
 	c.Validate = &ValidateService{client: c}
+	c.Blogs = &BlogsService{client: c}
 
 	return c, nil
 }
