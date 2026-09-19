@@ -881,3 +881,77 @@ func TestAccountsMoveSurfacesBlockingTables(t *testing.T) {
 		t.Fatalf("blocking_tables = %v", tables)
 	}
 }
+
+func TestAccountsCreateTelegramConnectCodeSendsWorkspace(t *testing.T) {
+	var method, path, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"code":"abc123","command":"/connect abc123","bot_username":"fopost_bot","deep_link":null,"group_link":null,"expires_at":"2026-09-19T12:15:00Z"}}`)
+	})
+
+	code, err := client.Accounts.CreateTelegramConnectCode(context.Background(), "ws_1")
+	if err != nil {
+		t.Fatalf("Accounts.CreateTelegramConnectCode: %v", err)
+	}
+	if method != "POST" || path != "/accounts/telegram/connect-code" || raw != `{"workspaceId":"ws_1"}` {
+		t.Fatalf("%s %s %s", method, path, raw)
+	}
+	if code.Code != "abc123" || code.BotUsername == nil || *code.BotUsername != "fopost_bot" || code.DeepLink != nil || code.ExpiresAt.IsZero() {
+		t.Fatalf("code = %+v", code)
+	}
+}
+
+func TestAccountsGetTelegramConnectStatusSendsCode(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"status":"failed","account_id":null,"reason":"card_required"}}`)
+	})
+
+	status, err := client.Accounts.GetTelegramConnectStatus(context.Background(), "abc123")
+	if err != nil {
+		t.Fatalf("Accounts.GetTelegramConnectStatus: %v", err)
+	}
+	if path != "/accounts/telegram/connect-code/status" || query != "code=abc123" {
+		t.Fatalf("%s?%s", path, query)
+	}
+	if status.Status != "failed" || status.AccountID != nil || status.Reason == nil || *status.Reason != "card_required" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestAccountsTelegramBotCommandsRoutes(t *testing.T) {
+	var method, path, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		if r.Method == "DELETE" {
+			_, _ = io.WriteString(w, `{"data":{"commands":[]}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":{"commands":[{"command":"start","description":"Start"}]}}`)
+	})
+	ctx := context.Background()
+
+	got, err := client.Accounts.GetTelegramBotCommands(ctx, "acc_1")
+	if err != nil || method != "GET" || path != "/accounts/acc_1/telegram/commands" || len(got.Commands) != 1 {
+		t.Fatalf("get: %v %s %s %+v", err, method, path, got)
+	}
+
+	set, err := client.Accounts.SetTelegramBotCommands(ctx, "acc_1", []TelegramBotCommand{{Command: "start", Description: "Start"}})
+	if err != nil || method != "PUT" || raw != `{"commands":[{"command":"start","description":"Start"}]}` {
+		t.Fatalf("set: %v %s %s", err, method, raw)
+	}
+	if set.Commands[0].Command != "start" {
+		t.Fatalf("set = %+v", set)
+	}
+
+	cleared, err := client.Accounts.DeleteTelegramBotCommands(ctx, "acc_1")
+	if err != nil || method != "DELETE" || path != "/accounts/acc_1/telegram/commands" || len(cleared.Commands) != 0 {
+		t.Fatalf("delete: %v %s %s %+v", err, method, path, cleared)
+	}
+}
