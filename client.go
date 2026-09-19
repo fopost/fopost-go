@@ -49,18 +49,19 @@ type Client struct {
 	maxRetries int
 	httpClient *http.Client
 
-	Posts       *PostsService
-	Workspaces  *WorkspacesService
-	Accounts    *AccountsService
-	Communities *CommunitiesService
-	Labels      *LabelsService
-	Webhooks    *WebhooksService
-	Analytics   *AnalyticsService
-	Automations *AutomationsService
-	Media       *MediaService
-	Inbox       *InboxService
-	Ads         *AdsService
-	Validate    *ValidateService
+	Posts         *PostsService
+	Workspaces    *WorkspacesService
+	Accounts      *AccountsService
+	AccountGroups *AccountGroupsService
+	Communities   *CommunitiesService
+	Labels        *LabelsService
+	Webhooks      *WebhooksService
+	Analytics     *AnalyticsService
+	Automations   *AutomationsService
+	Media         *MediaService
+	Inbox         *InboxService
+	Ads           *AdsService
+	Validate      *ValidateService
 }
 
 // Option configures a Client.
@@ -144,6 +145,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Posts = &PostsService{client: c}
 	c.Workspaces = &WorkspacesService{client: c}
 	c.Accounts = &AccountsService{client: c}
+	c.AccountGroups = &AccountGroupsService{client: c}
 	c.Communities = &CommunitiesService{client: c}
 	c.Labels = &LabelsService{client: c}
 	c.Webhooks = &WebhooksService{client: c}

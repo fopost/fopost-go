@@ -256,7 +256,8 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Posts`       | `List`, `Each`, `ListAll`, `Get`, `Create`, `Update`, `Delete`, `Duplicate`, `Publish`, `Retry`, `Cancel`, `Preflight`, `Deliveries`, `PublishRuns`, `Analytics`, `BulkShift`, `BulkLabel`, `BulkDelete`, `ValidateBulkImport`, `CommitBulkImport`, `RollbackBulkImport` |
 | `Workspaces`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Analytics`                                                                                                          |
-| `Accounts`    | `List`, `Get`, `Create`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`                                                |
+| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`           |
+| `AccountGroups` | `List`, `Get`, `Create`, `Update`, `Delete`, `SetMembers`                                                                                                       |
 | `Communities` | `List`, `Sync`, `Search`, `Add`, `Remove`                                                                                                                         |
 | `Labels`      | `List`, `Get`, `Create`, `Update`, `Delete`                                                                                                                       |
 | `Webhooks`    | `List`, `Create`, `Update`, `Delete`, `Test`                                                                                                                      |
@@ -279,7 +280,7 @@ err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
-`workspaces`, `accounts`, `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
+`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
 `ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus` and `Ads.Delete` spend money and
 need `publish` as well as `ads`; a boost or ad starts paused unless `Paused` is
 `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
