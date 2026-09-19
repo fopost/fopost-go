@@ -35,7 +35,7 @@ const (
 	// DefaultMaxRetries counts total attempts, so 3 means two retries.
 	DefaultMaxRetries = 3
 	// Version is the SDK version, reported in the User-Agent.
-	Version = "0.2.0"
+	Version = "0.3.0"
 
 	maxRetryWait  = 60 * time.Second
 	baseRetryWait = 500 * time.Millisecond
