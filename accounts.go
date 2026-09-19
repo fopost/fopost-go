@@ -14,10 +14,12 @@ type Account struct {
 	WorkspaceID string `json:"workspaceId"`
 	Platform    string `json:"platform"`
 	Username    string `json:"username"`
-	Name        string `json:"name"`
-	Avatar      string `json:"avatar"`
-	IsPrimary   bool   `json:"isPrimary"`
-	Active      bool   `json:"active"`
+	// Name is the display name override when set, else PlatformName.
+	Name         string `json:"name"`
+	PlatformName string `json:"platformName"`
+	Avatar       string `json:"avatar"`
+	IsPrimary    bool   `json:"isPrimary"`
+	Active       bool   `json:"active"`
 	// HealthStatus is one of the Health constants.
 	HealthStatus    string `json:"healthStatus"`
 	LastHealthCheck Time   `json:"lastHealthCheck"`
@@ -29,9 +31,11 @@ type AccountDetail struct {
 	WorkspaceID string `json:"workspace_id"`
 	Platform    string `json:"platform"`
 	Username    string `json:"username"`
-	Name        string `json:"name"`
-	Avatar      string `json:"avatar"`
-	Workspace   struct {
+	// Name is the display name override when set, else PlatformName.
+	Name         string `json:"name"`
+	PlatformName string `json:"platform_name"`
+	Avatar       string `json:"avatar"`
+	Workspace    struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 		Slug string `json:"slug"`
@@ -46,6 +50,27 @@ type AccountDetail struct {
 func (s *AccountsService) List(ctx context.Context, workspaceID string) ([]Account, error) {
 	q := newQuery()
 	q.str("workspaceId", workspaceID)
+	var out []Account
+	if err := s.client.json(ctx, "GET", "/accounts", nil, q.values(), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ListAccountsParams narrows ListWithParams. Zero fields are not sent.
+type ListAccountsParams struct {
+	WorkspaceID string
+	// GroupID keeps only the accounts in that account group.
+	GroupID string
+}
+
+// ListWithParams returns the connected accounts matching params.
+func (s *AccountsService) ListWithParams(ctx context.Context, params *ListAccountsParams) ([]Account, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspaceId", params.WorkspaceID)
+		q.str("group_id", params.GroupID)
+	}
 	var out []Account
 	if err := s.client.json(ctx, "GET", "/accounts", nil, q.values(), &out); err != nil {
 		return nil, err
@@ -99,6 +124,45 @@ func (s *AccountsService) Create(ctx context.Context, body *CreateAccountRequest
 // Delete disconnects an account.
 func (s *AccountsService) Delete(ctx context.Context, id string) error {
 	return s.client.Do(ctx, "DELETE", "/accounts/"+url.PathEscape(id), nil, nil, nil)
+}
+
+// RenamedAccount is an account's names after Rename.
+type RenamedAccount struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	PlatformName string `json:"platform_name"`
+}
+
+// Rename sets the name shown instead of the platform name. An empty
+// displayName restores the platform name.
+func (s *AccountsService) Rename(ctx context.Context, id, displayName string) (*RenamedAccount, error) {
+	body := map[string]any{"display_name": nil}
+	if displayName != "" {
+		body["display_name"] = displayName
+	}
+	out := &RenamedAccount{}
+	if err := s.client.json(ctx, "PATCH", "/accounts/"+url.PathEscape(id), body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MovedAccount is the account's workspace after Move.
+type MovedAccount struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+}
+
+// Move transfers an account to another workspace the caller owns. The account
+// leaves its account groups. A 409 with code "move_blocked" lists the blocking
+// records in its "blocking_tables" field, readable with (*Error).Field.
+func (s *AccountsService) Move(ctx context.Context, id, workspaceID string) (*MovedAccount, error) {
+	body := map[string]string{"workspace_id": workspaceID}
+	out := &MovedAccount{}
+	if err := s.client.json(ctx, "POST", "/accounts/"+url.PathEscape(id)+"/move", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // PrimaryResult is the account's primary flag after toggling.
