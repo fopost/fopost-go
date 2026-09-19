@@ -207,6 +207,85 @@ func TestMediaUploadRejectsAnEmptyCall(t *testing.T) {
 	}
 }
 
+func TestMediaUploadDirectPresignsPutsAndCompletes(t *testing.T) {
+	var calls []string
+	var presignBody map[string]any
+	var putKey, putType string
+	var putLength int64
+	var putBody []byte
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch {
+		case r.Method == "POST" && r.URL.Path == "/media/presign":
+			_ = json.NewDecoder(r.Body).Decode(&presignBody)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"uploadId":"up_1","uploadUrl":"`+"http://"+r.Host+`/bucket/up_1","method":"PUT","headers":{"Content-Type":"image/png"},"expiresAt":"2026-09-19T12:00:00Z"}}`)
+		case r.Method == "PUT" && r.URL.Path == "/bucket/up_1":
+			putKey = r.Header.Get("X-API-Key")
+			putType = r.Header.Get("Content-Type")
+			putLength = r.ContentLength
+			putBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusOK)
+		case r.Method == "POST" && r.URL.Path == "/media/presign/up_1/complete":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"id":"med_1","type":"image","name":"a.png","url":"https://cdn/a.png","previewUrl":"https://cdn/p/a.png","size":5}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	item, err := client.Media.UploadDirect(context.Background(), "ws_1", "a.png", "image/png", []byte("png-a"))
+	if err != nil {
+		t.Fatalf("Media.UploadDirect: %v", err)
+	}
+	if strings.Join(calls, ",") != "POST /media/presign,PUT /bucket/up_1,POST /media/presign/up_1/complete" {
+		t.Fatalf("calls = %v", calls)
+	}
+	if presignBody["workspaceId"] != "ws_1" || presignBody["filename"] != "a.png" || presignBody["mimeType"] != "image/png" || presignBody["size"] != float64(5) {
+		t.Fatalf("presign body = %v", presignBody)
+	}
+	if putKey != "" || putType != "image/png" || putLength != 5 || string(putBody) != "png-a" {
+		t.Fatalf("put = key %q type %q length %d body %q", putKey, putType, putLength, putBody)
+	}
+	if item.ID != "med_1" || item.AsMediaItem().URL != "https://cdn/a.png" {
+		t.Fatalf("item = %+v", item)
+	}
+}
+
+func TestMediaUploadDirectReturnsAPIErrorOnRejectedPut(t *testing.T) {
+	var completed bool
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/media/presign":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"uploadId":"up_1","uploadUrl":"`+"http://"+r.Host+`/bucket/up_1","method":"PUT","headers":{"Content-Type":"image/png"},"expiresAt":"2026-09-19T12:00:00Z"}}`)
+		case r.URL.Path == "/bucket/up_1":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, `<Error><Code>AccessDenied</Code></Error>`)
+		default:
+			completed = true
+		}
+	})
+
+	_, err := client.Media.UploadDirect(context.Background(), "ws_1", "a.png", "image/png", []byte("png-a"))
+	if !IsForbidden(err) {
+		t.Fatalf("err = %v, want a 403 *Error", err)
+	}
+	if completed {
+		t.Fatal("complete must not be called after a rejected PUT")
+	}
+}
+
+func TestMediaCompleteRequiresAnUploadID(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("no request should be sent")
+	})
+
+	if _, err := client.Media.Complete(context.Background(), ""); err == nil {
+		t.Fatal("expected an error without an upload id")
+	}
+}
+
 func TestMediaListRequiresAWorkspace(t *testing.T) {
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("no request should be sent")

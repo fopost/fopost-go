@@ -108,6 +108,21 @@ content := []fopost.ContentBlock{{
 }}
 ```
 
+Larger files can go straight to storage instead of through the API. `UploadDirect`
+presigns a slot, PUTs the bytes to it with no API key, and completes the upload:
+
+```go
+data, _ := os.ReadFile("clip.mp4")
+
+uploaded, err := client.Media.UploadDirect(ctx, workspace.ID, "clip.mp4", "video/mp4", data)
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+`Presign` and `Complete` are the two halves when you want to send the bytes
+yourself.
+
 ## Scheduling and publishing
 
 `Status` is `"draft"` or `"scheduled"`; a scheduled post needs `ScheduleAt`. To
@@ -230,7 +245,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Webhooks`    | `List`, `Create`, `Update`, `Delete`, `Test`                                                                                                                      |
 | `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`                                                           |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
-| `Media`       | `List`, `Upload`, `Delete`                                                                                                                                        |
+| `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `Reply`, `Hide`, `Unhide`, `Delete`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads` |
 
