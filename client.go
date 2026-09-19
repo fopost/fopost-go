@@ -58,6 +58,8 @@ type Client struct {
 	Analytics   *AnalyticsService
 	Automations *AutomationsService
 	Media       *MediaService
+	Inbox       *InboxService
+	Ads         *AdsService
 }
 
 // Option configures a Client.
@@ -147,6 +149,8 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}
 	c.Media = &MediaService{client: c}
+	c.Inbox = &InboxService{client: c}
+	c.Ads = &AdsService{client: c}
 
 	return c, nil
 }
