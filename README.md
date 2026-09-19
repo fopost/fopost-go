@@ -371,6 +371,22 @@ export FOPOST_API_KEY=fp_...
 go run ./examples/create-post "Hello from the Go SDK" --publish
 ```
 
+## Chatbots and the inbox
+
+The [chat adapter](https://fopost.com/docs/sdks/chat-adapter) turns the FoPost inbox into one send/receive channel for a chatbot
+framework. It ships in the TypeScript and Python SDKs. There is no dedicated adapter here and no
+API change behind it, so the same loop is three pieces with this client:
+
+1. **Verify** the `inbox.message_received` webhook. The payload is ids only, on purpose, so
+   nothing a customer wrote sits in your logs. The [signing scheme](https://fopost.com/docs/webhooks/verification)
+   is HMAC-SHA256 over `{timestamp}.{body}`, refused past a five minute tolerance.
+2. **Read** the item back with `client.Inbox.List(ctx, …)`, filtered to the payload's
+   `accountId` and matched on its `itemId`.
+3. **Answer** with `client.Inbox.Reply(ctx, item.ID, text)`, or open a thread with
+   `client.Inbox.StartConversation(ctx, …)`.
+
+Reading needs the `inbox` scope; answering needs `publish` as well.
+
 ## Contributing
 
 Issues and pull requests are welcome at
