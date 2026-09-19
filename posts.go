@@ -177,9 +177,11 @@ func (s *PostsService) Get(ctx context.Context, id string) (*Post, error) {
 // a scheduled post needs ScheduleAt. To send a post out now, create it and
 // call Publish.
 type CreatePostRequest struct {
-	WorkspaceID string         `json:"workspace_id"`
-	Accounts    []string       `json:"accounts"`
-	Content     []ContentBlock `json:"content"`
+	WorkspaceID string   `json:"workspace_id"`
+	Accounts    []string `json:"accounts,omitempty"`
+	// AccountGroupID adds every account in that group; Accounts may then be empty.
+	AccountGroupID string         `json:"account_group_id,omitempty"`
+	Content        []ContentBlock `json:"content"`
 	// ContentType is "post", "thread", or "reel".
 	ContentType string `json:"content_type,omitempty"`
 	// ArtifactType is "text_post", "thread", "article", "carousel",
