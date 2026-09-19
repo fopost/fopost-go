@@ -133,6 +133,9 @@ type ContactField struct {
 
 // ConversationAnalyticsRow is how one thread performed over the period.
 type ConversationAnalyticsRow struct {
+	// Key is an opaque, stable handle for the thread, not the id or handle the
+	// inbox groups on: that would be a person, and this reads under the
+	// analytics scope. Use it to line the same thread up between two calls.
 	Key       string `json:"key"`
 	AccountID string `json:"accountId"`
 	Platform  string `json:"platform"`
