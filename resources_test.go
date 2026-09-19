@@ -676,6 +676,130 @@ func TestAdsLeadsPassesTheCursor(t *testing.T) {
 	}
 }
 
+func TestAdsTreeDecodesNestedCampaigns(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"adAccountId":"act_1","currency":"USD","workspaceId":"ws_1","campaigns":[{"id":"c_1","name":"Launch","status":"PAUSED","budgetMinor":null,"adSets":[{"id":"s_1","name":"US","campaignId":"c_1","status":"ACTIVE","budgetMinor":5000,"budgetType":"daily","ads":[{"id":"a_1","name":"Hero","adSetId":"s_1","creativeId":"cr_1","status":"ACTIVE"}]}]}]}}`)
+	})
+
+	tree, err := client.Ads.Tree(context.Background(), "act_1", &AdObjectParams{WorkspaceID: "ws_1", ConnectionID: "conn_1"})
+	if err != nil {
+		t.Fatalf("Ads.Tree: %v", err)
+	}
+	if path != "/ads/accounts/act_1/tree" || query != "connection_id=conn_1&workspace_id=ws_1" {
+		t.Fatalf("%s?%s", path, query)
+	}
+	c := tree.Campaigns[0]
+	if c.ID != "c_1" || c.BudgetMinor != nil || *c.AdSets[0].BudgetMinor != 5000 || c.AdSets[0].Ads[0].CreativeID != "cr_1" {
+		t.Fatalf("tree = %+v", tree)
+	}
+}
+
+func TestAdsDuplicateCampaignSendsNoBodyUnlessPausedIsSet(t *testing.T) {
+	var bodies []string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(raw))
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"id":"c_2"}}`)
+	})
+
+	params := &AdObjectParams{WorkspaceID: "ws_1", ConnectionID: "conn_1"}
+	id, err := client.Ads.DuplicateCampaign(context.Background(), "c_1", params, nil)
+	if err != nil || id != "c_2" {
+		t.Fatalf("DuplicateCampaign = %q, %v", id, err)
+	}
+	if _, err := client.Ads.DuplicateCampaign(context.Background(), "c_1", params, Bool(false)); err != nil {
+		t.Fatalf("DuplicateCampaign: %v", err)
+	}
+	if bodies[0] != "" || !strings.Contains(bodies[1], `"paused":false`) {
+		t.Fatalf("bodies = %q", bodies)
+	}
+}
+
+func TestAdsSetStatusesSendsObjects(t *testing.T) {
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":[{"id":"c_1","level":"campaign","ok":true,"error":null},{"id":"a_1","level":"ad","ok":false,"error":"Not found"}]}`)
+	})
+
+	results, err := client.Ads.SetStatuses(context.Background(), &SetStatusesRequest{
+		WorkspaceID:  "ws_1",
+		ConnectionID: "conn_1",
+		Status:       AdStatusPaused,
+		Objects:      []AdObjectRef{{ID: "c_1", Level: AdLevelCampaign}, {ID: "a_1", Level: AdLevelAd}},
+	})
+	if err != nil {
+		t.Fatalf("Ads.SetStatuses: %v", err)
+	}
+	objects, _ := body["objects"].([]any)
+	if body["status"] != "paused" || len(objects) != 2 {
+		t.Fatalf("body = %v", body)
+	}
+	if !results[0].OK || results[1].OK || results[1].Error != "Not found" {
+		t.Fatalf("results = %+v", results)
+	}
+}
+
+func TestAdsInsightsSendsQueryParams(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"objectId":"c_1","currency":"USD","since":"2026-09-01","until":"2026-09-07","breakdownBy":"age","totals":{"impressions":100,"clicks":4,"ctr":4,"spendMinor":250},"breakdown":[{"key":"18-24","metrics":{"impressions":60}}],"timeline":[{"date":"2026-09-01","metrics":{"impressions":10}}]}}`)
+	})
+
+	report, err := client.Ads.Insights(context.Background(), &InsightsParams{
+		ConnectionID: "conn_1",
+		ObjectID:     "c_1",
+		Since:        "2026-09-01",
+		Until:        "2026-09-07",
+		Breakdown:    InsightsByAge,
+		Daily:        Bool(true),
+	})
+	if err != nil {
+		t.Fatalf("Ads.Insights: %v", err)
+	}
+	if path != "/ads/insights" || query != "breakdown=age&connection_id=conn_1&daily=true&object_id=c_1&since=2026-09-01&until=2026-09-07" {
+		t.Fatalf("%s?%s", path, query)
+	}
+	if report.Totals.CTR != 4 || report.Breakdown[0].Metrics.Impressions != 60 || report.Timeline[0].Date != "2026-09-01" {
+		t.Fatalf("report = %+v", report)
+	}
+
+	if _, err := client.Ads.AdInsights(context.Background(), "ad_1", &AdInsightsParams{WorkspaceID: "ws_1", Since: "2026-09-01", Until: "2026-09-07"}); err != nil {
+		t.Fatalf("Ads.AdInsights: %v", err)
+	}
+	if path != "/ads/ad_1/insights" || query != "since=2026-09-01&until=2026-09-07&workspace_id=ws_1" {
+		t.Fatalf("%s?%s", path, query)
+	}
+}
+
+func TestAdsLeadsFeedPassesTheCursor(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"leads":[{"id":"l_1","leadId":"m_1","pageId":"123","formId":null,"isOrganic":true,"fields":[{"name":"email","values":["jamie@yourbrand.com"]}],"submittedAt":"2026-09-19T10:00:00Z"}],"nextCursor":null}}`)
+	})
+
+	page, err := client.Ads.LeadsFeed(context.Background(), &LeadsFeedParams{
+		WorkspaceID: "ws_1",
+		PageID:      "123",
+		Cursor:      "cursor_1",
+		Limit:       50,
+	})
+	if err != nil {
+		t.Fatalf("Ads.LeadsFeed: %v", err)
+	}
+	if path != "/ads/leads" || query != "cursor=cursor_1&limit=50&page_id=123&workspace_id=ws_1" {
+		t.Fatalf("%s?%s", path, query)
+	}
+	if len(page.Leads) != 1 || page.Leads[0].LeadID != "m_1" || page.Leads[0].FormID != "" || page.NextCursor != "" {
+		t.Fatalf("page = %+v", page)
+	}
+}
+
 func TestValidatePostSendsBodyToValidatePost(t *testing.T) {
 	var path, method string
 	var body map[string]any
