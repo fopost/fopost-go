@@ -82,6 +82,8 @@ for concurrent use.
   the camelCase `InboxPageMeta` (`page`, `perPage`, `total`) instead.
 - Scopes: one per service, named after it. `Validate` needs `posts`; `Inbox` needs `inbox`; `Ads` needs `ads`, and
   `Ads.Boost`/`Create`/`SetStatus`/`Delete` also need `publish` because they spend money.
+  `Inbox.EditComment`/`Like`/`Unlike`/`Pin`/`Unpin`/`React`/`StartConversation`/`SetTyping`,
+  `ReplyWith` carrying media or quick replies, and deleting our own reply also need `publish`.
   A boost or ad starts paused unless `Paused` is `Bool(false)`. `/inbox/chat/*` (browser-
   encrypted X Chat) and the attachment stream `/inbox/{id}/attachments/{index}` are not
   wrapped; the SDK has no binary-download pattern.
@@ -142,7 +144,7 @@ retries pass a larger `WithMaxRetries` and a handler that counts attempts with
 Coverage today: transport (auth header, user agent, query omission, envelope unwrap, path
 escaping, escape hatch, 429/5xx retry, no retry on 4xx, context cancellation, non-JSON
 bodies), errors, posts (pagination, `Each`, bulk, multipart import), the other resources
-(including inbox filters, snake_case read body, reply, approvals, and ads camelCase body,
+(including inbox filters, snake_case read body, reply, the comment and DM actions, approvals, and ads camelCase body,
 workspace query, audiences, lead cursor), and `types.go` time/helpers. Add to the matching
 `*_test.go` rather than a new file.
 
