@@ -141,6 +141,23 @@ post, err := client.Posts.Create(ctx, &fopost.CreatePostRequest{
 })
 ```
 
+`Validate` checks content against platform rules before a post exists, and
+nothing is stored:
+
+```go
+check, _ := client.Validate.Post(ctx, &fopost.ValidatePostRequest{
+	Content:   "Hello from Go",
+	Platforms: []string{"twitter", "linkedin"},
+})
+for _, platform := range check.Platforms {
+	fmt.Println(platform.Platform, platform.Ready, platform.Issues)
+}
+
+length, _ := client.Validate.Length(ctx, &fopost.ValidateLengthRequest{Text: "Hello", Platforms: []string{"bluesky"}})
+media, _ := client.Validate.Media(ctx, "https://yourbrand.com/chart.png")
+fmt.Println(length.OK, media.OK, media.Issues)
+```
+
 `Preflight` reports per-account blockers and advisory signals without publishing,
 and `Publish` with `DryRun` validates the whole delivery plan:
 
@@ -248,6 +265,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `Reply`, `Hide`, `Unhide`, `Delete`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads` |
+| `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
 and decodes the body as it came:
@@ -260,7 +278,7 @@ err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
 ## Scopes and limits
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
-created: `posts` (which also covers publishing, deliveries, and media),
+created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
 `workspaces`, `accounts`, `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
 `ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus` and `Ads.Delete` spend money and
 need `publish` as well as `ads`; a boost or ad starts paused unless `Paused` is

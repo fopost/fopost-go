@@ -524,3 +524,99 @@ func TestAdsLeadsPassesTheCursor(t *testing.T) {
 		t.Fatalf("page = %+v", page)
 	}
 }
+
+func TestValidatePostSendsBodyToValidatePost(t *testing.T) {
+	var path, method string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, method = r.URL.Path, r.Method
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"ready":false,"platforms":[{"platform":"twitter","ready":false,"issues":["too long"],"score":42,"signals":[{"level":"warn","code":"over_length","message":"Over the limit"}]},{"platform":"linkedin","ready":true,"issues":[],"signals":[]}]}}`)
+	})
+
+	size := int64(1024)
+	out, err := client.Validate.Post(context.Background(), &ValidatePostRequest{
+		Content:   "Hello",
+		Media:     []ValidateMediaItem{{URL: "https://yourbrand.com/a.png", MimeType: "image/png", Size: &size}},
+		Platforms: []string{"twitter", "linkedin"},
+	})
+	if err != nil {
+		t.Fatalf("Validate.Post: %v", err)
+	}
+	if method != "POST" || path != "/validate/post" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["content"] != "Hello" {
+		t.Fatalf("body = %v", body)
+	}
+	platforms, _ := body["platforms"].([]any)
+	if len(platforms) != 2 || platforms[0] != "twitter" {
+		t.Fatalf("platforms = %v", body["platforms"])
+	}
+	media, _ := body["media"].([]any)
+	item, _ := media[0].(map[string]any)
+	if item["url"] != "https://yourbrand.com/a.png" || item["mime_type"] != "image/png" || item["size"] != float64(1024) {
+		t.Fatalf("media = %v", body["media"])
+	}
+	if out.Ready || len(out.Platforms) != 2 || out.Platforms[0].Score == nil || *out.Platforms[0].Score != 42 {
+		t.Fatalf("out = %+v", out)
+	}
+	if out.Platforms[1].Score != nil || out.Platforms[0].Signals[0].Code != "over_length" {
+		t.Fatalf("out = %+v", out)
+	}
+}
+
+func TestValidateLengthSendsBodyToValidateLength(t *testing.T) {
+	var path, method string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, method = r.URL.Path, r.Method
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"ok":true,"platforms":[{"platform":"twitter","length":5,"limit":280,"unit":"chars","ok":true,"signals":[]},{"platform":"linkedin","length":5,"limit":null,"unit":"chars","ok":true,"signals":[]}]}}`)
+	})
+
+	out, err := client.Validate.Length(context.Background(), &ValidateLengthRequest{
+		Text:      "Hello",
+		Platforms: []string{"twitter", "linkedin"},
+	})
+	if err != nil {
+		t.Fatalf("Validate.Length: %v", err)
+	}
+	if method != "POST" || path != "/validate/length" {
+		t.Fatalf("%s %s", method, path)
+	}
+	platforms, _ := body["platforms"].([]any)
+	if body["text"] != "Hello" || len(platforms) != 2 {
+		t.Fatalf("body = %v", body)
+	}
+	if !out.OK || len(out.Platforms) != 2 || out.Platforms[0].Limit == nil || *out.Platforms[0].Limit != 280 {
+		t.Fatalf("out = %+v", out)
+	}
+	if out.Platforms[1].Limit != nil || out.Platforms[1].Unit != "chars" {
+		t.Fatalf("out = %+v", out)
+	}
+}
+
+func TestValidateMediaSendsURLToValidateMedia(t *testing.T) {
+	var path, method string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, method = r.URL.Path, r.Method
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"ok":false,"issues":["file too large"],"name":"big.mp4","size":99}}`)
+	})
+
+	out, err := client.Validate.Media(context.Background(), "https://yourbrand.com/big.mp4")
+	if err != nil {
+		t.Fatalf("Validate.Media: %v", err)
+	}
+	if method != "POST" || path != "/validate/media" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["url"] != "https://yourbrand.com/big.mp4" || len(body) != 1 {
+		t.Fatalf("body = %v", body)
+	}
+	if out.OK || out.Name != "big.mp4" || out.Size != 99 || out.MimeType != "" || len(out.Issues) != 1 {
+		t.Fatalf("out = %+v", out)
+	}
+}

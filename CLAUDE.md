@@ -7,7 +7,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 Go module `github.com/fopost/fopost-go` — the official Go client for the FoPost REST API
 (`fopost.com`). `fopost.Version` is `0.2.0`. It wraps the API's HTTP surface in services
 hung off `*Client`: `Posts`, `Workspaces`, `Accounts`, `Communities`, `Labels`, `Webhooks`,
-`Analytics`, `Automations`, `Media`, `Inbox`, `Ads`.
+`Analytics`, `Automations`, `Media`, `Inbox`, `Ads`, `Validate`.
 
 `go 1.22` minimum (the code uses the `min` builtin, so 1.21+ is required regardless).
 **Standard library only** — `go.mod` has no `require` block.
@@ -48,7 +48,7 @@ One flat package `fopost` at the repository root, one file per API group:
 | `errors.go` | `*Error`, `RateLimit`, `APIError`/`StatusOf`/`CodeOf`, `Is*` predicates |
 | `types.go` | `Time`, `PageMeta`, `ContentBlock`, `Text`/`Thread`, `queryBuilder`, `Bool`/`String`/`Int` |
 | `multipart.go` | `buildMultipart` — media upload and CSV bulk import bodies |
-| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `ads.go` | one `*Service` each, with its request/response types |
+| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `ads.go` `validate.go` | one `*Service` each, with its request/response types |
 | `internal/version/main.go` | prints `fopost.Version` so the release workflow can check it against the tag |
 
 Request flow: a service method builds its query with `newQuery()` and its body as a struct
@@ -80,7 +80,7 @@ for concurrent use.
   otherwise passes the body through. Paginated lists decode `meta` into `PageMeta`
   (`current_page`, `per_page`, `total`, `last_page`, `from`, `to`); the inbox lists carry
   the camelCase `InboxPageMeta` (`page`, `perPage`, `total`) instead.
-- Scopes: one per service, named after it. `Inbox` needs `inbox`; `Ads` needs `ads`, and
+- Scopes: one per service, named after it. `Validate` needs `posts`; `Inbox` needs `inbox`; `Ads` needs `ads`, and
   `Ads.Boost`/`Create`/`SetStatus`/`Delete` also need `publish` because they spend money.
   A boost or ad starts paused unless `Paused` is `Bool(false)`. `/inbox/chat/*` (browser-
   encrypted X Chat) and the attachment stream `/inbox/{id}/attachments/{index}` are not
