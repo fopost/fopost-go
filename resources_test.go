@@ -216,3 +216,232 @@ func TestMediaListRequiresAWorkspace(t *testing.T) {
 		t.Fatal("expected an error without a workspace id")
 	}
 }
+
+func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":[{"id":"itm_1","platform":"instagram","type":"comment","state":"unread","direction":"inbound","text":"Love this","attachments":[],"canReply":true,"account":{"id":"acc_1","platform":"instagram","username":"yourbrand"}}],"meta":{"page":2,"perPage":20,"total":41}}`)
+	})
+
+	page, err := client.Inbox.List(context.Background(), &ListInboxParams{
+		WorkspaceID: "ws_1",
+		Type:        InboxTypeComment,
+		Sort:        InboxSortUnanswered,
+		Page:        2,
+		PerPage:     20,
+	})
+	if err != nil {
+		t.Fatalf("Inbox.List: %v", err)
+	}
+	if path != "/inbox" {
+		t.Fatalf("path = %q", path)
+	}
+	if query != "page=2&per_page=20&sort=unanswered&type=comment&workspace_id=ws_1" {
+		t.Fatalf("query = %q", query)
+	}
+	if len(page.Data) != 1 || page.Data[0].Account.Username != "yourbrand" || !page.Data[0].CanReply {
+		t.Fatalf("data = %+v", page.Data)
+	}
+	if page.Meta.Page != 2 || page.Meta.PerPage != 20 || page.Meta.Total != 41 {
+		t.Fatalf("meta = %+v", page.Meta)
+	}
+}
+
+func TestInboxMarkThreadReadSendsSnakeCaseBody(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"updated":3}}`)
+	})
+
+	updated, err := client.Inbox.MarkThreadRead(context.Background(), &MarkInboxThreadReadRequest{
+		WorkspaceID:    "ws_1",
+		AccountID:      "acc_1",
+		PostExternalID: "18001",
+	})
+	if err != nil {
+		t.Fatalf("Inbox.MarkThreadRead: %v", err)
+	}
+	if method != "POST" || path != "/inbox/read" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["workspace_id"] != "ws_1" || body["account_id"] != "acc_1" || body["post_external_id"] != "18001" {
+		t.Fatalf("body = %v", body)
+	}
+	if _, present := body["conversation_id"]; present {
+		t.Fatalf("conversation_id sent empty: %v", body)
+	}
+	if updated != 3 {
+		t.Fatalf("updated = %d", updated)
+	}
+}
+
+func TestInboxReplyPostsTextAndDecodesTheReply(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"item":{"id":"itm_1","state":"read","repliedAt":"2026-09-19T10:00:00Z"},"reply":{"externalId":"18002","externalUrl":"https://example.com/c/18002"}}}`)
+	})
+
+	result, err := client.Inbox.Reply(context.Background(), "itm_1", "Thanks!")
+	if err != nil {
+		t.Fatalf("Inbox.Reply: %v", err)
+	}
+	if method != "POST" || path != "/inbox/itm_1/reply" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["text"] != "Thanks!" {
+		t.Fatalf("body = %v", body)
+	}
+	if result.Item.ID != "itm_1" || result.Item.RepliedAt.IsZero() || result.Reply.ExternalID != "18002" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestInboxApproveReplyOmitsEmptyText(t *testing.T) {
+	var path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"id":7,"outcome":"sent"}}`)
+	})
+
+	decision, err := client.Inbox.ApproveReply(context.Background(), 7, "")
+	if err != nil {
+		t.Fatalf("Inbox.ApproveReply: %v", err)
+	}
+	if path != "/inbox/approvals/7/approve" {
+		t.Fatalf("path = %q", path)
+	}
+	if len(body) != 0 {
+		t.Fatalf("body = %v, want empty object", body)
+	}
+	if decision.ID != 7 || decision.Outcome != "sent" {
+		t.Fatalf("decision = %+v", decision)
+	}
+}
+
+func TestAdsBoostSendsCamelCaseBodyAndDecodesTheAd(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"id":"ad_1","workspaceId":"ws_1","kind":"boost","name":"Launch","goal":"engagement","status":"paused","adAccountId":"act_1","sourcePostId":"post_1","budgetMinor":5000,"budgetType":"daily","currency":"USD","targeting":{"countries":["US"],"ageMin":18,"ageMax":65,"gender":"all"},"insights":null,"createdAt":"2026-09-19T10:00:00Z"}}`)
+	})
+
+	ad, err := client.Ads.Boost(context.Background(), &BoostPostRequest{
+		WorkspaceID:  "ws_1",
+		ConnectionID: "conn_1",
+		AdAccountID:  "act_1",
+		PostID:       "post_1",
+		AccountID:    "acc_1",
+		Name:         "Launch",
+		Goal:         AdGoalEngagement,
+		Budget:       AdBudget{Minor: 5000, Type: AdBudgetDaily},
+		Targeting:    AdTargeting{Countries: []string{"US"}, AgeMin: 18, AgeMax: 65, Gender: "all"},
+		Paused:       Bool(false),
+	})
+	if err != nil {
+		t.Fatalf("Ads.Boost: %v", err)
+	}
+	if method != "POST" || path != "/ads/boost" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["workspaceId"] != "ws_1" || body["connectionId"] != "conn_1" || body["postId"] != "post_1" || body["accountId"] != "acc_1" {
+		t.Fatalf("body = %v", body)
+	}
+	if body["paused"] != false {
+		t.Fatalf("paused = %v", body["paused"])
+	}
+	budget, _ := body["budget"].(map[string]any)
+	if budget["minor"] != float64(5000) || budget["type"] != "daily" {
+		t.Fatalf("budget = %v", budget)
+	}
+	if _, present := budget["endAt"]; present {
+		t.Fatalf("endAt sent empty: %v", budget)
+	}
+	if ad.ID != "ad_1" || ad.Kind != "boost" || ad.Status != AdStatusPaused || ad.Insights != nil || ad.Targeting.Countries[0] != "US" {
+		t.Fatalf("ad = %+v", ad)
+	}
+}
+
+func TestAdsSetStatusSendsWorkspaceQuery(t *testing.T) {
+	var method, path, query string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"id":"ad_1","status":"active"}}`)
+	})
+
+	ad, err := client.Ads.SetStatus(context.Background(), "ad_1", "ws_1", AdStatusActive)
+	if err != nil {
+		t.Fatalf("Ads.SetStatus: %v", err)
+	}
+	if method != "PATCH" || path != "/ads/ad_1" || query != "workspace_id=ws_1" {
+		t.Fatalf("%s %s?%s", method, path, query)
+	}
+	if body["status"] != "active" {
+		t.Fatalf("body = %v", body)
+	}
+	if ad.Status != AdStatusActive {
+		t.Fatalf("ad = %+v", ad)
+	}
+}
+
+func TestAdsAudiencesDecodesPixels(t *testing.T) {
+	var query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"audiences":[{"id":"aud_1","name":"Buyers","subtype":"CUSTOM","sizeLower":1000,"sizeUpper":null}],"pixels":[{"id":"px_1","name":"Site"}],"workspaceId":"ws_1"}}`)
+	})
+
+	result, err := client.Ads.Audiences(context.Background(), &ListAudiencesParams{
+		WorkspaceID:  "ws_1",
+		ConnectionID: "conn_1",
+		AdAccountID:  "act_1",
+	})
+	if err != nil {
+		t.Fatalf("Ads.Audiences: %v", err)
+	}
+	if query != "ad_account_id=act_1&connection_id=conn_1&workspace_id=ws_1" {
+		t.Fatalf("query = %q", query)
+	}
+	if len(result.Audiences) != 1 || *result.Audiences[0].SizeLower != 1000 || result.Audiences[0].SizeUpper != nil {
+		t.Fatalf("audiences = %+v", result.Audiences)
+	}
+	if len(result.Pixels) != 1 || result.Pixels[0].ID != "px_1" {
+		t.Fatalf("pixels = %+v", result.Pixels)
+	}
+}
+
+func TestAdsLeadsPassesTheCursor(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"leads":[{"id":"lead_1","fields":[{"name":"email","values":["jamie@yourbrand.com"]}],"isOrganic":false}],"nextCursor":"cursor_2"}}`)
+	})
+
+	page, err := client.Ads.Leads(context.Background(), "form_1", &ListLeadsParams{
+		ConnectionID: "conn_1",
+		PageID:       "123",
+		After:        "cursor_1",
+	})
+	if err != nil {
+		t.Fatalf("Ads.Leads: %v", err)
+	}
+	if path != "/ads/lead-forms/form_1/leads" || query != "after=cursor_1&connection_id=conn_1&page_id=123" {
+		t.Fatalf("%s?%s", path, query)
+	}
+	if len(page.Leads) != 1 || page.Leads[0].Fields[0].Values[0] != "jamie@yourbrand.com" || page.NextCursor != "cursor_2" {
+		t.Fatalf("page = %+v", page)
+	}
+}

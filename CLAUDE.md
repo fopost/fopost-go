@@ -5,9 +5,9 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 ## What This Is
 
 Go module `github.com/fopost/fopost-go` — the official Go client for the FoPost REST API
-(`fopost.com`). `fopost.Version` is `0.1.0`. It wraps the API's HTTP surface in services
+(`fopost.com`). `fopost.Version` is `0.2.0`. It wraps the API's HTTP surface in services
 hung off `*Client`: `Posts`, `Workspaces`, `Accounts`, `Communities`, `Labels`, `Webhooks`,
-`Analytics`, `Automations`, `Media`.
+`Analytics`, `Automations`, `Media`, `Inbox`, `Ads`.
 
 `go 1.22` minimum (the code uses the `min` builtin, so 1.21+ is required regardless).
 **Standard library only** — `go.mod` has no `require` block.
@@ -48,7 +48,7 @@ One flat package `fopost` at the repository root, one file per API group:
 | `errors.go` | `*Error`, `RateLimit`, `APIError`/`StatusOf`/`CodeOf`, `Is*` predicates |
 | `types.go` | `Time`, `PageMeta`, `ContentBlock`, `Text`/`Thread`, `queryBuilder`, `Bool`/`String`/`Int` |
 | `multipart.go` | `buildMultipart` — media upload and CSV bulk import bodies |
-| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` | one `*Service` each, with its request/response types |
+| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `ads.go` | one `*Service` each, with its request/response types |
 | `internal/version/main.go` | prints `fopost.Version` so the release workflow can check it against the tag |
 
 Request flow: a service method builds its query with `newQuery()` and its body as a struct
@@ -78,7 +78,13 @@ for concurrent use.
   `ctx.Err()`. `WithMaxRetries(1)` disables retrying.
 - Success envelope: `unwrapEnvelope` peels `{"data": ...}` when a `data` key is present,
   otherwise passes the body through. Paginated lists decode `meta` into `PageMeta`
-  (`current_page`, `per_page`, `total`, `last_page`, `from`, `to`).
+  (`current_page`, `per_page`, `total`, `last_page`, `from`, `to`); the inbox lists carry
+  the camelCase `InboxPageMeta` (`page`, `perPage`, `total`) instead.
+- Scopes: one per service, named after it. `Inbox` needs `inbox`; `Ads` needs `ads`, and
+  `Ads.Boost`/`Create`/`SetStatus`/`Delete` also need `publish` because they spend money.
+  A boost or ad starts paused unless `Paused` is `Bool(false)`. `/inbox/chat/*` (browser-
+  encrypted X Chat) and the attachment stream `/inbox/{id}/attachments/{index}` are not
+  wrapped; the SDK has no binary-download pattern.
 - Error envelope: `{"error": "<code>", "message": "<text>"}` becomes a single `*Error` with
   `Status`, `Code`, `Message`, the raw `Body`, `RetryAfter`, and `RateLimit`. **There is no
   error subclass hierarchy** — the brief's per-status types are expressed as predicates:
@@ -135,8 +141,10 @@ retries pass a larger `WithMaxRetries` and a handler that counts attempts with
 
 Coverage today: transport (auth header, user agent, query omission, envelope unwrap, path
 escaping, escape hatch, 429/5xx retry, no retry on 4xx, context cancellation, non-JSON
-bodies), errors, posts (pagination, `Each`, bulk, multipart import), the other resources,
-and `types.go` time/helpers. Add to the matching `*_test.go` rather than a new file.
+bodies), errors, posts (pagination, `Each`, bulk, multipart import), the other resources
+(including inbox filters, snake_case read body, reply, approvals, and ads camelCase body,
+workspace query, audiences, lead cursor), and `types.go` time/helpers. Add to the matching
+`*_test.go` rather than a new file.
 
 ## Releasing
 

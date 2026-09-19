@@ -231,6 +231,8 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`                                                           |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
 | `Media`       | `List`, `Upload`, `Delete`                                                                                                                                        |
+| `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `Reply`, `Hide`, `Unhide`, `Delete`, `ListApprovals`, `ApproveReply`, `RejectReply` |
+| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads` |
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
 and decodes the body as it came:
@@ -244,9 +246,11 @@ err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, and media),
-`workspaces`, `accounts`, `labels`, `webhooks`, `analytics`, `automations`. A key
-may also be bound to a single workspace, in which case naming any other one
-returns `403`.
+`workspaces`, `accounts`, `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
+`ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus` and `Ads.Delete` spend money and
+need `publish` as well as `ads`; a boost or ad starts paused unless `Paused` is
+`fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
+naming any other one returns `403`.
 
 Mutating endpoints require an active subscription and return `403` with code
 `subscription_required` without one. Rate limits are per key, per minute, and
