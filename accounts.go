@@ -297,3 +297,92 @@ func (s *AccountsService) Analytics(ctx context.Context, id string, limit int) (
 	}
 	return out, nil
 }
+
+// TelegramConnectCode is a one-time code that connects a Telegram chat.
+type TelegramConnectCode struct {
+	Code string `json:"code"`
+	// Command is what to send in the chat: "/connect <code>".
+	Command     string  `json:"command"`
+	BotUsername *string `json:"bot_username"`
+	DeepLink    *string `json:"deep_link"`
+	GroupLink   *string `json:"group_link"`
+	ExpiresAt   Time    `json:"expires_at"`
+}
+
+// CreateTelegramConnectCode mints a code valid for 15 minutes. Sending its
+// Command to the bot in a chat connects that chat. workspaceID may be empty
+// for a key bound to one workspace.
+func (s *AccountsService) CreateTelegramConnectCode(ctx context.Context, workspaceID string) (*TelegramConnectCode, error) {
+	body := map[string]string{}
+	if workspaceID != "" {
+		body["workspaceId"] = workspaceID
+	}
+	out := &TelegramConnectCode{}
+	if err := s.client.json(ctx, "POST", "/accounts/telegram/connect-code", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TelegramConnectStatus is where a connect code stands.
+type TelegramConnectStatus struct {
+	// Status is "pending", "connected", "failed" or "expired".
+	Status string `json:"status"`
+	// AccountID is set once Status is "connected".
+	AccountID *string `json:"account_id"`
+	// Reason is "card_required", "slot_taken" or "workspace_unavailable" once
+	// Status is "failed".
+	Reason *string `json:"reason"`
+}
+
+// GetTelegramConnectStatus reports whether a connect code has been used.
+func (s *AccountsService) GetTelegramConnectStatus(ctx context.Context, code string) (*TelegramConnectStatus, error) {
+	q := newQuery()
+	q.str("code", code)
+	out := &TelegramConnectStatus{}
+	if err := s.client.json(ctx, "GET", "/accounts/telegram/connect-code/status", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TelegramBotCommand is one entry in the bot's command menu.
+type TelegramBotCommand struct {
+	// Command is 1-32 lowercase letters, digits or underscores, without the slash.
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
+// TelegramBotCommands is the command menu the bot shows in a chat.
+type TelegramBotCommands struct {
+	Commands []TelegramBotCommand `json:"commands"`
+}
+
+// GetTelegramBotCommands returns the command menu for a connected chat.
+func (s *AccountsService) GetTelegramBotCommands(ctx context.Context, id string) (*TelegramBotCommands, error) {
+	out := &TelegramBotCommands{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/telegram/commands", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetTelegramBotCommands replaces the command menu for a connected chat with
+// 1-100 commands.
+func (s *AccountsService) SetTelegramBotCommands(ctx context.Context, id string, commands []TelegramBotCommand) (*TelegramBotCommands, error) {
+	body := TelegramBotCommands{Commands: commands}
+	out := &TelegramBotCommands{}
+	if err := s.client.json(ctx, "PUT", "/accounts/"+url.PathEscape(id)+"/telegram/commands", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteTelegramBotCommands clears the command menu for a connected chat.
+func (s *AccountsService) DeleteTelegramBotCommands(ctx context.Context, id string) (*TelegramBotCommands, error) {
+	out := &TelegramBotCommands{}
+	if err := s.client.json(ctx, "DELETE", "/accounts/"+url.PathEscape(id)+"/telegram/commands", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
