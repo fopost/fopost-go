@@ -81,7 +81,8 @@ for concurrent use.
   (`current_page`, `per_page`, `total`, `last_page`, `from`, `to`); the inbox lists carry
   the camelCase `InboxPageMeta` (`page`, `perPage`, `total`) instead.
 - Scopes: one per service, named after it. `Validate` needs `posts`; `Inbox` needs `inbox`; `Ads` needs `ads`, and
-  `Ads.Boost`/`Create`/`SetStatus`/`Delete` also need `publish` because they spend money.
+  `Ads.Boost`/`Create`/`SetStatus`/`Delete`/`SetStatuses` and the create/update/delete/duplicate
+  calls on campaigns, ad sets and network ads also need `publish` because they spend money.
   `Inbox.EditComment`/`Like`/`Unlike`/`Pin`/`Unpin`/`React`/`StartConversation`/`SetTyping`,
   `ReplyWith` carrying media or quick replies, and deleting our own reply also need `publish`.
   A boost or ad starts paused unless `Paused` is `Bool(false)`. `/inbox/chat/*` (browser-
