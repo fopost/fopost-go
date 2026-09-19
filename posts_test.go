@@ -260,3 +260,26 @@ func TestBulkImportPostsMultipart(t *testing.T) {
 		t.Fatalf("validation = %+v", validation)
 	}
 }
+
+func TestPostsCreateSendsAccountGroupWithoutAccounts(t *testing.T) {
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"id":"post_1","status":"draft"}}`)
+	})
+
+	if _, err := client.Posts.Create(context.Background(), &CreatePostRequest{
+		WorkspaceID:    "ws_1",
+		AccountGroupID: "grp_1",
+		Content:        Text("Hello"),
+	}); err != nil {
+		t.Fatalf("Posts.Create: %v", err)
+	}
+	if body["account_group_id"] != "grp_1" {
+		t.Fatalf("account_group_id = %v", body["account_group_id"])
+	}
+	if _, sent := body["accounts"]; sent {
+		t.Fatalf("accounts = %v, want it omitted", body["accounts"])
+	}
+}

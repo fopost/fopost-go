@@ -620,3 +620,113 @@ func TestValidateMediaSendsURLToValidateMedia(t *testing.T) {
 		t.Fatalf("out = %+v", out)
 	}
 }
+
+func TestAccountGroupsCreateSendsBodyAndDecodesTheGroup(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"id":"grp_1","name":"Clients","account_ids":["acc_1"]}}`)
+	})
+
+	group, err := client.AccountGroups.Create(context.Background(), &CreateAccountGroupRequest{
+		WorkspaceID: "ws_1", Name: "Clients", AccountIDs: []string{"acc_1"},
+	})
+	if err != nil {
+		t.Fatalf("AccountGroups.Create: %v", err)
+	}
+	if method != "POST" || path != "/account-groups" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if body["workspace_id"] != "ws_1" || body["name"] != "Clients" {
+		t.Fatalf("body = %v", body)
+	}
+	if group.ID != "grp_1" || len(group.AccountIDs) != 1 {
+		t.Fatalf("group = %+v", group)
+	}
+}
+
+func TestAccountGroupsSetMembersSendsAnEmptyListNotNull(t *testing.T) {
+	var method, path, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_, _ = io.WriteString(w, `{"data":{"id":"grp_1","account_ids":[]}}`)
+	})
+
+	if _, err := client.AccountGroups.SetMembers(context.Background(), "grp_1", nil); err != nil {
+		t.Fatalf("AccountGroups.SetMembers: %v", err)
+	}
+	if method != "PUT" || path != "/account-groups/grp_1/members" {
+		t.Fatalf("%s %s", method, path)
+	}
+	if raw != `{"account_ids":[]}` {
+		t.Fatalf("body = %s", raw)
+	}
+}
+
+func TestAccountsListWithParamsSendsGroupID(t *testing.T) {
+	var query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":[{"id":"acc_1","name":"Brand","platformName":"acme"}]}`)
+	})
+
+	accounts, err := client.Accounts.ListWithParams(context.Background(), &ListAccountsParams{GroupID: "grp_1"})
+	if err != nil {
+		t.Fatalf("Accounts.ListWithParams: %v", err)
+	}
+	if query != "group_id=grp_1" {
+		t.Fatalf("query = %q", query)
+	}
+	if accounts[0].PlatformName != "acme" || accounts[0].Name != "Brand" {
+		t.Fatalf("accounts = %+v", accounts)
+	}
+}
+
+func TestAccountsRenameSendsNullToRestore(t *testing.T) {
+	var method, path, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_, _ = io.WriteString(w, `{"data":{"id":"acc_1","name":"acme","platform_name":"acme"}}`)
+	})
+
+	renamed, err := client.Accounts.Rename(context.Background(), "acc_1", "")
+	if err != nil {
+		t.Fatalf("Accounts.Rename: %v", err)
+	}
+	if method != "PATCH" || path != "/accounts/acc_1" || raw != `{"display_name":null}` {
+		t.Fatalf("%s %s %s", method, path, raw)
+	}
+	if renamed.PlatformName != "acme" {
+		t.Fatalf("renamed = %+v", renamed)
+	}
+}
+
+func TestAccountsMoveSurfacesBlockingTables(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":"move_blocked","message":"blocked","blocking_tables":["posts"]}`)
+	})
+
+	_, err := client.Accounts.Move(context.Background(), "acc_1", "ws_2")
+	if method != "POST" || path != "/accounts/acc_1/move" || body["workspace_id"] != "ws_2" {
+		t.Fatalf("%s %s %v", method, path, body)
+	}
+	if !IsConflict(err) || CodeOf(err) != "move_blocked" {
+		t.Fatalf("err = %v", err)
+	}
+	var tables []string
+	if apiErr, ok := APIError(err); !ok || apiErr.Field("blocking_tables", &tables) != nil || len(tables) != 1 {
+		t.Fatalf("blocking_tables = %v", tables)
+	}
+}
