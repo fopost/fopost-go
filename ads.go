@@ -443,6 +443,14 @@ type CreateAdRequest struct {
 	// `utm_source=meta&utm_medium=paid`.
 	URLTags string `json:"urlTags,omitempty"`
 	Paused  *bool  `json:"paused,omitempty"`
+	// MessagingDestination is required by the "messages" goal: one of the
+	// Messaging constants.
+	MessagingDestination string `json:"messagingDestination,omitempty"`
+	// PhoneNumber is required by the "calls" goal, in E.164, e.g. "+14155550123".
+	PhoneNumber string `json:"phoneNumber,omitempty"`
+	// ProductSetID is required by the "sales" goal: makes this a catalog ad over
+	// that product set.
+	ProductSetID string `json:"productSetId,omitempty"`
 }
 
 // Create makes an ad from scratch. Needs the `publish` scope as well as `ads`.
@@ -828,6 +836,14 @@ type CreateAdSetRequest struct {
 	Budget    AdBudget    `json:"budget"`
 	Targeting AdTargeting `json:"targeting"`
 	Paused    *bool       `json:"paused,omitempty"`
+	// MessagingDestination is required by the "messages" goal: one of the
+	// Messaging constants.
+	MessagingDestination string `json:"messagingDestination,omitempty"`
+	// PhoneNumber is required by the "calls" goal, in E.164, e.g. "+14155550123".
+	PhoneNumber string `json:"phoneNumber,omitempty"`
+	// ProductSetID is required by the "sales" goal: the product set the catalog
+	// ad runs from.
+	ProductSetID string `json:"productSetId,omitempty"`
 }
 
 // UpdateAdSetRequest is the body of UpdateAdSet. BudgetMinor keeps the budget
@@ -1065,6 +1081,17 @@ type CreateCreativeRequest struct {
 	// ThumbnailMediaURL is a video's poster frame, as a library image.
 	ThumbnailMediaURL string         `json:"thumbnailMediaUrl,omitempty"`
 	Cards             []CarouselCard `json:"cards,omitempty"`
+	// ProductSetID is required for the "catalog" format: the network fills the
+	// cards from this product set.
+	ProductSetID string `json:"productSetId,omitempty"`
+	// Description is the per-product line under the headline, "catalog" only.
+	Description string `json:"description,omitempty"`
+	// CreatorPostID is required for the "partnership" format: the creator's
+	// media id, or their Page post as `{page}_{post}`.
+	CreatorPostID string `json:"creatorPostId,omitempty"`
+	// CreatorInstagramUserID is the creator's Instagram account, "partnership"
+	// only.
+	CreatorInstagramUserID string `json:"creatorInstagramUserId,omitempty"`
 }
 
 // CreateCreative adds an image, video or carousel creative to an ad account.
