@@ -664,6 +664,8 @@ type DiscordChannel struct {
 	Type     int     `json:"type"`
 	ParentID *string `json:"parent_id"`
 	NSFW     bool    `json:"nsfw"`
+	// CanPost is false when a channel permission in Discord shuts the bot out.
+	CanPost bool `json:"can_post"`
 	// IsCurrent marks the channel the account posts to.
 	IsCurrent bool `json:"is_current"`
 }
