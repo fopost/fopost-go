@@ -266,6 +266,8 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
+| `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |
+| `Sequences`   | `List`, `Get`, `Create`, `Update`, `Delete`, `Enroll`, `Unenroll`, `Enrollments` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage` |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 
@@ -275,6 +277,51 @@ and decodes the body as it came:
 ```go
 var body map[string]any
 err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
+```
+
+## Broadcasts and sequences
+
+A broadcast is one message into every conversation you already have with a segment of your contacts; a sequence is a series of them on a delay. Neither opens a cold DM.
+
+Nothing is sent into a closed messaging window: Messenger and Instagram take a business-initiated message only within 24 hours of the contact's last one, so recipients outside it come back skipped with `window_closed` rather than attempted. Telegram, Slack, Bluesky and Reddit have no window. The number sent is therefore often lower than the audience, and that is correct rather than a failure.
+
+Reading needs the `inbox` scope; `Send`, `Cancel`, `Enroll` and `Unenroll` also need `publish`.
+
+```go
+broadcast, err := client.Broadcasts.Create(ctx, &fopost.CreateBroadcastRequest{
+    WorkspaceID: workspaceID,
+    AccountID:   accountID,
+    Name:        "September check-in",
+    Text:        "New colours just landed. Want a look?",
+    Audience:    &fopost.AudienceFilter{Platforms: []string{"instagram"}},
+})
+
+// Recipients is how many contacts matched, not how many will be messaged.
+sent, err := client.Broadcasts.Send(ctx, broadcast.ID)
+
+// Who was skipped, and why.
+page, err := client.Broadcasts.Recipients(ctx, broadcast.ID, &fopost.ListRecipientsParams{
+    Status: fopost.RecipientSkipped,
+})
+for _, r := range page.Data {
+    fmt.Printf("%s: %s\n", r.DisplayName, r.SkipReason)
+}
+
+sequence, err := client.Sequences.Create(ctx, &fopost.CreateSequenceRequest{
+    WorkspaceID: workspaceID,
+    AccountID:   accountID,
+    Name:        "Welcome",
+    Steps: []fopost.SequenceStep{
+        {DelayHours: 0, Text: "Thanks for the follow — anything I can help with?"},
+        {DelayHours: 48, Text: "Here is what people usually ask us first."},
+    },
+})
+
+_, err = client.Sequences.Enroll(ctx, sequence.ID, &fopost.EnrollRequest{
+    ContactIDs: []string{contactID},
+})
+// Nothing further fires for them.
+_, err = client.Sequences.Unenroll(ctx, sequence.ID, []string{contactID})
 ```
 
 ## Scopes and limits
