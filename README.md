@@ -319,3 +319,31 @@ gofmt -l .
 MIT. See [LICENSE](LICENSE).
 
 Questions or a problem: [fopost.com/contact](https://fopost.com/contact).
+
+### Google Ads
+
+Campaigns, ad groups, ads, audiences and insights are on `client.Ads` and dispatch by
+connection. What only Google has is on `client.GoogleAds`:
+
+```go
+scope := fopost.GoogleScope{ConnectionID: "c4d5e6f7-…", CustomerID: "1234567890"}
+
+keywords, err := client.GoogleAds.Keywords(ctx, scope, nil)
+
+id, err := client.GoogleAds.CreateKeyword(ctx, &fopost.CreateGoogleKeywordRequest{
+    GoogleScope: fopost.GoogleScope{
+        WorkspaceID:  "7d2b8c11-…",
+        ConnectionID: "c4d5e6f7-…",
+        CustomerID:   "1234567890",
+    },
+    AdGroupID: "1234567890~adGroup~77",
+    Text:      "running shoes",
+    MatchType: fopost.GoogleMatchExact,
+})
+```
+
+Also `KeywordIdeas`, `KeywordMetrics`, `SearchTerms`, `BidStrategies`, `AdSchedule` and
+`SetAdSchedule`, the negative keyword lists, `Assets` and `AssetGroups`,
+`LocalServicesLeads`, the conversion methods, and `Query` for a raw read-only GAQL
+SELECT. Changes need the `publish` scope as well as `ads`; `CustomerID` has to name an
+account the connection's grant reaches.
