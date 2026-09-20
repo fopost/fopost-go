@@ -208,6 +208,7 @@ const (
 	PlatformNostr             = "nostr"
 	PlatformWhop              = "whop"
 	PlatformSkool             = "skool"
+	PlatformWhatsApp          = "whatsapp"
 )
 
 // queryBuilder collects query parameters, skipping the zero values the API

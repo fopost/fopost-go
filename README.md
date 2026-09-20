@@ -158,6 +158,32 @@ media, _ := client.Validate.Media(ctx, "https://yourbrand.com/chart.png")
 fmt.Println(length.OK, media.OK, media.Issues)
 ```
 
+`WhatsApp` reaches a WhatsApp Business number the customer already owns. The
+platform owns the templates, flows, profile and commerce settings, so every call
+is live and all of it answers 503 until WhatsApp is set up:
+
+```go
+// Filing a template returns the review status the platform gave it, never an
+// assumed one.
+template, _ := client.WhatsApp.CreateTemplate(ctx, accountID, &fopost.CreateWhatsAppTemplateRequest{
+	Name:       "order_shipped",
+	Language:   "en_US",
+	Category:   "UTILITY",
+	Components: []map[string]any{{"type": "BODY", "text": "Your order is on its way."}},
+})
+fmt.Println(template.Status) // PENDING until the platform approves it
+
+// A flow is created as a draft, its screens uploaded, then published.
+flow, _ := client.WhatsApp.CreateFlow(ctx, accountID, &fopost.CreateWhatsAppFlowRequest{
+	Name:       "Book a fitting",
+	Categories: []string{"LEAD_GENERATION"},
+})
+client.WhatsApp.UploadFlowJSON(ctx, accountID, flow.ID, map[string]any{"version": "7.0", "screens": []any{}})
+client.WhatsApp.PublishFlow(ctx, accountID, flow.ID)
+answers, _ := client.WhatsApp.FlowResponses(ctx, accountID)
+fmt.Println(len(answers))
+```
+
 `Preflight` reports per-account blockers and advisory signals without publishing,
 and `Publish` with `DryRun` validates the whole delivery plan:
 
