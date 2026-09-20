@@ -63,6 +63,7 @@ type Client struct {
 	Contacts      *ContactsService
 	Broadcasts    *BroadcastsService
 	Sequences     *SequencesService
+	Knowledge     *KnowledgeService
 	Ads           *AdsService
 	Validate      *ValidateService
 }
@@ -159,6 +160,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Contacts = &ContactsService{client: c}
 	c.Broadcasts = &BroadcastsService{client: c}
 	c.Sequences = &SequencesService{client: c}
+	c.Knowledge = &KnowledgeService{client: c}
 	c.Ads = &AdsService{client: c}
 	c.Validate = &ValidateService{client: c}
 

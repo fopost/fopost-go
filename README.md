@@ -256,7 +256,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Posts`       | `List`, `Each`, `ListAll`, `Get`, `Create`, `Update`, `Delete`, `Duplicate`, `Publish`, `Retry`, `Cancel`, `Preflight`, `Deliveries`, `PublishRuns`, `Analytics`, `BulkShift`, `BulkLabel`, `BulkDelete`, `ValidateBulkImport`, `CommitBulkImport`, `RollbackBulkImport` |
 | `Workspaces`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Analytics`                                                                                                          |
-| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands`, `ListSlackChannels`, `ListSlackMembers`, `GetSlackIdentity`, `UpdateSlackIdentity` |
+| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands`, `ListSlackChannels`, `ListSlackMembers`, `GetSlackIdentity`, `UpdateSlackIdentity`, `GetIceBreakers`, `SetIceBreakers`, `DeleteIceBreakers`, `GetPersistentMenu`, `SetPersistentMenu`, `DeletePersistentMenu`, `GetGreeting`, `SetGreeting`, `DeleteGreeting`, `GetWebhookSubscription`, `ResubscribeWebhook`, `ListDiscordChannels`, `SwitchDiscordChannel`, `GetDiscordIdentity`, `UpdateDiscordIdentity`, `ListDiscordPins`, `DeleteDiscordMessage`, `PinDiscordMessage`, `UnpinDiscordMessage`, `CrosspostDiscordMessage`, `CreateDiscordThread`, `SendDiscordDM`, `ListDiscordEvents`, `GetDiscordEvent`, `CreateDiscordEvent`, `UpdateDiscordEvent`, `DeleteDiscordEvent`, `ListDiscordMembers`, `GetDiscordMember`, `ListDiscordRoles`, `CreateDiscordRole`, `UpdateDiscordRole`, `DeleteDiscordRole`, `AddDiscordMemberRole`, `RemoveDiscordMemberRole` |
 | `AccountGroups` | `List`, `Get`, `Create`, `Update`, `Delete`, `SetMembers`                                                                                                       |
 | `Communities` | `List`, `Sync`, `Search`, `Add`, `Remove`                                                                                                                         |
 | `Labels`      | `List`, `Get`, `Create`, `Update`, `Delete`                                                                                                                       |
@@ -264,11 +264,12 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`                                                           |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
 | `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
-| `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply` |
+| `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `Handover`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
 | `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |
 | `Sequences`   | `List`, `Get`, `Create`, `Update`, `Delete`, `Enroll`, `Unenroll`, `Enrollments` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage` |
+| `Knowledge`   | `List`, `Create`, `Update`, `Delete`, `Sync`, `Search`                                                                                                           |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
@@ -328,8 +329,8 @@ _, err = client.Sequences.Unenroll(ctx, sequence.ID, []string{contactID})
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
-`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
-`ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
+`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`
+(which also covers `Knowledge`), `ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
 and the create, update, delete and duplicate calls on campaigns, ad sets and
 network ads spend money and need `publish` as well as `ads`; a boost, ad or new
 campaign object starts paused unless `Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
