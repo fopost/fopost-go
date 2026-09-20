@@ -66,6 +66,7 @@ type Client struct {
 	Knowledge     *KnowledgeService
 	Ads           *AdsService
 	Validate      *ValidateService
+	Activity      *ActivityService
 }
 
 // Option configures a Client.
@@ -152,6 +153,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.AccountGroups = &AccountGroupsService{client: c}
 	c.Communities = &CommunitiesService{client: c}
 	c.Labels = &LabelsService{client: c}
+	c.Activity = &ActivityService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}
