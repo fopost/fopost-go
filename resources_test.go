@@ -627,6 +627,31 @@ func TestAdsSetStatusSendsWorkspaceQuery(t *testing.T) {
 	}
 }
 
+func TestAdsAuthorizeNamesItsNetwork(t *testing.T) {
+	var path string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_, _ = io.WriteString(w, `{"data":{"url":"https://login.test/x"}}`)
+	})
+
+	if _, err := client.Ads.Authorize(context.Background(), &AuthorizeAdsRequest{WorkspaceID: "ws_1"}); err != nil {
+		t.Fatalf("Ads.Authorize: %v", err)
+	}
+	if path != "/ads/connections/meta/authorize" {
+		t.Fatalf("default path = %s", path)
+	}
+
+	if _, err := client.Ads.Authorize(context.Background(), &AuthorizeAdsRequest{
+		WorkspaceID: "ws_1",
+		Provider:    "pinterest",
+	}); err != nil {
+		t.Fatalf("Ads.Authorize: %v", err)
+	}
+	if path != "/ads/connections/pinterest/authorize" {
+		t.Fatalf("provider path = %s", path)
+	}
+}
+
 func TestAdsAudiencesDecodesPixels(t *testing.T) {
 	var query string
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {

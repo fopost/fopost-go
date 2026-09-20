@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// AdsService covers Meta ads: boosts and ads created through FoPost, the ad
+// AdsService covers ads across ad networks: boosts and ads created through FoPost, the ad
 // connections they run on, audiences, targeting search and lead forms. Every
 // method needs the `ads` scope; Boost, Create, SetStatus, Delete, the create,
 // update, delete and duplicate calls on campaigns, ad sets and network ads, and
@@ -160,7 +160,7 @@ type ExternalAd struct {
 	WorkspaceID     string `json:"workspaceId"`
 }
 
-// AdConnection is one Meta Ads grant in a workspace.
+// AdConnection is one ad-network grant in a workspace.
 type AdConnection struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider"`
@@ -321,7 +321,7 @@ func (s *AdsService) Boostable(ctx context.Context, workspaceID string) ([]Boost
 	return out, nil
 }
 
-// Connections returns the Meta Ads connections the key can reach.
+// Connections returns the ad connections the key can reach.
 func (s *AdsService) Connections(ctx context.Context, workspaceID string) ([]AdConnection, error) {
 	var out []AdConnection
 	if err := s.client.json(ctx, "GET", "/ads/connections", nil, workspaceQuery(workspaceID), &out); err != nil {
@@ -340,26 +340,45 @@ func (s *AdsService) Sources(ctx context.Context, workspaceID string) ([]AdSourc
 	return out, nil
 }
 
-// AuthorizeMetaAdsRequest is the body of AuthorizeMeta.
-type AuthorizeMetaAdsRequest struct {
+// AuthorizeAdsRequest is the body of Authorize.
+type AuthorizeAdsRequest struct {
 	WorkspaceID string `json:"workspaceId"`
-	// Method is "business" (the default) for Facebook Login for Business, or
-	// "user" for a personal login.
+	// Provider names the ad network to connect. Empty means "meta".
+	Provider string `json:"-"`
+	// Method is the network's own login method: "business" (the default) for
+	// Facebook Login for Business, or "user" for a personal login.
 	Method string `json:"method,omitempty"`
-	// ReturnTo is the dashboard path to land on after Meta redirects back.
+	// ReturnTo is the dashboard path to land on after the network redirects back.
 	ReturnTo string `json:"returnTo,omitempty"`
 }
 
-// AuthorizeMeta returns the Meta login URL; the caller finishes it in a
-// browser.
-func (s *AdsService) AuthorizeMeta(ctx context.Context, body *AuthorizeMetaAdsRequest) (string, error) {
+// AuthorizeMetaAdsRequest is the body of the deprecated AuthorizeMeta.
+//
+// Deprecated: use AuthorizeAdsRequest.
+type AuthorizeMetaAdsRequest = AuthorizeAdsRequest
+
+// Authorize returns the network's login URL; the caller finishes it in a
+// browser. A network that is not available on the deployment answers 503.
+func (s *AdsService) Authorize(ctx context.Context, body *AuthorizeAdsRequest) (string, error) {
+	provider := "meta"
+	if body != nil && body.Provider != "" {
+		provider = body.Provider
+	}
 	var out struct {
 		URL string `json:"url"`
 	}
-	if err := s.client.json(ctx, "POST", "/ads/connections/meta/authorize", body, nil, &out); err != nil {
+	path := "/ads/connections/" + url.PathEscape(provider) + "/authorize"
+	if err := s.client.json(ctx, "POST", path, body, nil, &out); err != nil {
 		return "", err
 	}
 	return out.URL, nil
+}
+
+// AuthorizeMeta returns the Meta login URL.
+//
+// Deprecated: use Authorize, which takes a Provider.
+func (s *AdsService) AuthorizeMeta(ctx context.Context, body *AuthorizeMetaAdsRequest) (string, error) {
+	return s.Authorize(ctx, body)
 }
 
 // DeleteConnection removes a connection and every ad record created through
@@ -372,7 +391,7 @@ func (s *AdsService) DeleteConnection(ctx context.Context, id, workspaceID strin
 // Paused is Bool(false).
 type BoostPostRequest struct {
 	WorkspaceID string `json:"workspaceId"`
-	// ConnectionID is a Meta Ads connection in the workspace.
+	// ConnectionID is an ad connection in the workspace.
 	ConnectionID string `json:"connectionId"`
 	// AdAccountID is the Meta ad account, `act_…`.
 	AdAccountID string `json:"adAccountId"`
@@ -402,7 +421,7 @@ func (s *AdsService) Boost(ctx context.Context, body *BoostPostRequest) (*Ad, er
 // is Bool(false).
 type CreateAdRequest struct {
 	WorkspaceID string `json:"workspaceId"`
-	// ConnectionID is a Meta Ads connection in the workspace.
+	// ConnectionID is an ad connection in the workspace.
 	ConnectionID string `json:"connectionId"`
 	// AdAccountID is the Meta ad account, `act_…`.
 	AdAccountID string `json:"adAccountId"`
