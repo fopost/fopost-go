@@ -60,6 +60,10 @@ type Client struct {
 	Automations   *AutomationsService
 	Media         *MediaService
 	Inbox         *InboxService
+	Contacts      *ContactsService
+	Broadcasts    *BroadcastsService
+	Sequences     *SequencesService
+	Knowledge     *KnowledgeService
 	Ads           *AdsService
 	Validate      *ValidateService
 	Activity      *ActivityService
@@ -155,6 +159,10 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Automations = &AutomationsService{client: c}
 	c.Media = &MediaService{client: c}
 	c.Inbox = &InboxService{client: c}
+	c.Contacts = &ContactsService{client: c}
+	c.Broadcasts = &BroadcastsService{client: c}
+	c.Sequences = &SequencesService{client: c}
+	c.Knowledge = &KnowledgeService{client: c}
 	c.Ads = &AdsService{client: c}
 	c.Validate = &ValidateService{client: c}
 

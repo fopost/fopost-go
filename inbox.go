@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// InboxService covers the social inbox: comments, mentions and DMs read from
+// InboxService covers the social inbox: comments, mentions, reviews and DMs read from
 // connected accounts, replies sent as them, and drafted replies awaiting a
 // person. Every method needs the `inbox` scope.
 type InboxService struct{ client *Client }
@@ -16,6 +16,9 @@ const (
 	InboxTypeComment = "comment"
 	InboxTypeMention = "mention"
 	InboxTypeDM      = "dm"
+	// InboxTypeReview is a rating left on the business itself: a Google
+	// Business review or a Facebook Page recommendation.
+	InboxTypeReview = "review"
 )
 
 // Inbox item states.
@@ -37,6 +40,7 @@ const (
 const (
 	InboxThreadsComments = "comments"
 	InboxThreadsMentions = "mentions"
+	InboxThreadsReviews  = "reviews"
 )
 
 // InboxAccountRef is the connected account an inbox row belongs to.
@@ -82,7 +86,7 @@ type InboxPostContext struct {
 	Published       *InboxPostRef `json:"published"`
 }
 
-// InboxItem is one comment, mention or DM.
+// InboxItem is one comment, mention, review or DM.
 type InboxItem struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspaceId"`
@@ -92,12 +96,14 @@ type InboxItem struct {
 	// State is one of the InboxState constants.
 	State string `json:"state"`
 	// Direction is "inbound" or "outbound".
-	Direction        string            `json:"direction"`
-	ConversationID   string            `json:"conversationId"`
-	AuthorName       string            `json:"authorName"`
-	AuthorHandle     string            `json:"authorHandle"`
-	AuthorAvatarURL  string            `json:"authorAvatarUrl"`
-	Text             string            `json:"text"`
+	Direction       string `json:"direction"`
+	ConversationID  string `json:"conversationId"`
+	AuthorName      string `json:"authorName"`
+	AuthorHandle    string `json:"authorHandle"`
+	AuthorAvatarURL string `json:"authorAvatarUrl"`
+	Text            string `json:"text"`
+	// Rating is the stars on a review, 1-5; zero on every other type.
+	Rating           int               `json:"rating"`
 	Attachments      []InboxAttachment `json:"attachments"`
 	Permalink        string            `json:"permalink"`
 	PostExternalID   string            `json:"postExternalId"`
@@ -131,19 +137,21 @@ type InboxItem struct {
 	Account         *InboxAccountRef  `json:"account"`
 }
 
-// InboxThread is one platform post with comments, or one post the account was
-// mentioned in.
+// InboxThread is one platform post with comments, one post the account was
+// mentioned in, or one review left on the business.
 type InboxThread struct {
-	WorkspaceID       string            `json:"workspaceId"`
-	AccountID         string            `json:"accountId"`
-	PostExternalID    string            `json:"postExternalId"`
-	CommentCount      int               `json:"commentCount"`
-	UnreadCount       int               `json:"unreadCount"`
-	LastCommentAt     Time              `json:"lastCommentAt"`
-	LastCommentText   string            `json:"lastCommentText"`
-	LastCommentAuthor string            `json:"lastCommentAuthor"`
-	Post              *InboxPostContext `json:"post"`
-	Account           *InboxAccountRef  `json:"account"`
+	WorkspaceID       string `json:"workspaceId"`
+	AccountID         string `json:"accountId"`
+	PostExternalID    string `json:"postExternalId"`
+	CommentCount      int    `json:"commentCount"`
+	UnreadCount       int    `json:"unreadCount"`
+	LastCommentAt     Time   `json:"lastCommentAt"`
+	LastCommentText   string `json:"lastCommentText"`
+	LastCommentAuthor string `json:"lastCommentAuthor"`
+	// Rating is the stars on a review thread; zero on comments and mentions.
+	Rating  int               `json:"rating"`
+	Post    *InboxPostContext `json:"post"`
+	Account *InboxAccountRef  `json:"account"`
 }
 
 // InboxParticipant is the other side of a DM thread.
@@ -362,7 +370,7 @@ func (p *ListInboxConversationsParams) values() url.Values {
 	return q.values()
 }
 
-// List returns one page of comments, mentions and DMs, newest first.
+// List returns one page of comments, mentions, reviews and DMs, newest first.
 func (s *InboxService) List(ctx context.Context, params *ListInboxParams) (*InboxItemList, error) {
 	out := &InboxItemList{}
 	if err := s.client.Do(ctx, "GET", "/inbox", nil, params.values(), out); err != nil {
@@ -372,7 +380,8 @@ func (s *InboxService) List(ctx context.Context, params *ListInboxParams) (*Inbo
 }
 
 // Threads returns one page of threads: one row per platform post with
-// comments, or per post the account was mentioned in.
+// comments, per post the account was mentioned in, or per review left on the
+// business.
 func (s *InboxService) Threads(ctx context.Context, params *ListInboxThreadsParams) (*InboxThreadList, error) {
 	out := &InboxThreadList{}
 	if err := s.client.Do(ctx, "GET", "/inbox/posts", nil, params.values(), out); err != nil {
@@ -635,6 +644,39 @@ func (s *InboxService) SetTyping(ctx context.Context, conversationID, accountID 
 		return false, err
 	}
 	return out.Typing, nil
+}
+
+// InboxHandover is the outcome of a Messenger thread hand-over. AppID is empty
+// when control was taken back.
+type InboxHandover struct {
+	AppID   string `json:"app_id"`
+	Control string `json:"control"`
+}
+
+// HandoverOptions carries the optional parts of a hand-over. An empty AppID
+// takes control back instead of passing it.
+type HandoverOptions struct {
+	AppID    string
+	Metadata string
+}
+
+// Handover passes a Messenger thread to another Meta app, or takes it back when
+// opts is nil or its AppID is empty. Also needs the publish scope.
+func (s *InboxService) Handover(ctx context.Context, conversationID, accountID string, opts *HandoverOptions) (*InboxHandover, error) {
+	body := map[string]any{"account_id": accountID}
+	if opts != nil {
+		if opts.AppID != "" {
+			body["app_id"] = opts.AppID
+		}
+		if opts.Metadata != "" {
+			body["metadata"] = opts.Metadata
+		}
+	}
+	out := &InboxHandover{}
+	if err := s.client.json(ctx, "POST", "/inbox/conversations/"+url.PathEscape(conversationID)+"/handover", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ListApprovals returns drafted replies a person still has to send, optionally
