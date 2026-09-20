@@ -256,7 +256,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Posts`       | `List`, `Each`, `ListAll`, `Get`, `Create`, `Update`, `Delete`, `Duplicate`, `Publish`, `Retry`, `Cancel`, `Preflight`, `Deliveries`, `PublishRuns`, `Analytics`, `BulkShift`, `BulkLabel`, `BulkDelete`, `ValidateBulkImport`, `CommitBulkImport`, `RollbackBulkImport` |
 | `Workspaces`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Analytics`                                                                                                          |
-| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands`, `ListSlackChannels`, `ListSlackMembers`, `GetSlackIdentity`, `UpdateSlackIdentity` |
+| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands`, `ListSlackChannels`, `ListSlackMembers`, `GetSlackIdentity`, `UpdateSlackIdentity`, `GetIceBreakers`, `SetIceBreakers`, `DeleteIceBreakers`, `GetPersistentMenu`, `SetPersistentMenu`, `DeletePersistentMenu`, `GetGreeting`, `SetGreeting`, `DeleteGreeting`, `GetWebhookSubscription`, `ResubscribeWebhook`, `ListDiscordChannels`, `SwitchDiscordChannel`, `GetDiscordIdentity`, `UpdateDiscordIdentity`, `ListDiscordPins`, `DeleteDiscordMessage`, `PinDiscordMessage`, `UnpinDiscordMessage`, `CrosspostDiscordMessage`, `CreateDiscordThread`, `SendDiscordDM`, `ListDiscordEvents`, `GetDiscordEvent`, `CreateDiscordEvent`, `UpdateDiscordEvent`, `DeleteDiscordEvent`, `ListDiscordMembers`, `GetDiscordMember`, `ListDiscordRoles`, `CreateDiscordRole`, `UpdateDiscordRole`, `DeleteDiscordRole`, `AddDiscordMemberRole`, `RemoveDiscordMemberRole` |
 | `AccountGroups` | `List`, `Get`, `Create`, `Update`, `Delete`, `SetMembers`                                                                                                       |
 | `Communities` | `List`, `Sync`, `Search`, `Add`, `Remove`                                                                                                                         |
 | `Labels`      | `List`, `Get`, `Create`, `Update`, `Delete`                                                                                                                       |
@@ -264,8 +264,12 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`                                                           |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
 | `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
-| `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply` |
+| `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `Handover`, `ListApprovals`, `ApproveReply`, `RejectReply` |
+| `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
+| `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |
+| `Sequences`   | `List`, `Get`, `Create`, `Update`, `Delete`, `Enroll`, `Unenroll`, `Enrollments` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `Goals`, `Catalogs`, `CreateCatalog`, `Catalog`, `UpdateCatalog`, `DeleteCatalog`, `CatalogProducts`, `WriteCatalogProducts`, `ProductFeeds`, `CreateProductFeed`, `DeleteProductFeed`, `FeedUploads`, `StartFeedUpload`, `ProductSets`, `CreateProductSet`, `UpdateProductSet`, `DeleteProductSet`, `ReachFrequency`, `CreateReachFrequency`, `ReachFrequencyPredictionByID`, `ReserveReachFrequency`, `CancelReachFrequency`, `Library`, `PartnershipCreators`, `RequestPartnership`, `RevokePartnership`, `AccountActivity`, `Labels`, `CreateLabel`, `UpdateLabel`, `DeleteLabel`, `ApplyLabel`, `Studies`, `CreateStudy`, `Study`, `DeleteStudy`, `IosCampaignLimits`, `HighDemandPeriods`, `CreateHighDemandPeriod`, `DeleteHighDemandPeriod`, `ValueRuleSets`, `CreateValueRuleSet`, `DeleteValueRuleSet` |
+| `Knowledge`   | `List`, `Create`, `Update`, `Delete`, `Sync`, `Search`                                                                                                           |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
@@ -276,12 +280,57 @@ var body map[string]any
 err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
 ```
 
+## Broadcasts and sequences
+
+A broadcast is one message into every conversation you already have with a segment of your contacts; a sequence is a series of them on a delay. Neither opens a cold DM.
+
+Nothing is sent into a closed messaging window: Messenger and Instagram take a business-initiated message only within 24 hours of the contact's last one, so recipients outside it come back skipped with `window_closed` rather than attempted. Telegram, Slack, Bluesky and Reddit have no window. The number sent is therefore often lower than the audience, and that is correct rather than a failure.
+
+Reading needs the `inbox` scope; `Send`, `Cancel`, `Enroll` and `Unenroll` also need `publish`.
+
+```go
+broadcast, err := client.Broadcasts.Create(ctx, &fopost.CreateBroadcastRequest{
+    WorkspaceID: workspaceID,
+    AccountID:   accountID,
+    Name:        "September check-in",
+    Text:        "New colours just landed. Want a look?",
+    Audience:    &fopost.AudienceFilter{Platforms: []string{"instagram"}},
+})
+
+// Recipients is how many contacts matched, not how many will be messaged.
+sent, err := client.Broadcasts.Send(ctx, broadcast.ID)
+
+// Who was skipped, and why.
+page, err := client.Broadcasts.Recipients(ctx, broadcast.ID, &fopost.ListRecipientsParams{
+    Status: fopost.RecipientSkipped,
+})
+for _, r := range page.Data {
+    fmt.Printf("%s: %s\n", r.DisplayName, r.SkipReason)
+}
+
+sequence, err := client.Sequences.Create(ctx, &fopost.CreateSequenceRequest{
+    WorkspaceID: workspaceID,
+    AccountID:   accountID,
+    Name:        "Welcome",
+    Steps: []fopost.SequenceStep{
+        {DelayHours: 0, Text: "Thanks for the follow — anything I can help with?"},
+        {DelayHours: 48, Text: "Here is what people usually ask us first."},
+    },
+})
+
+_, err = client.Sequences.Enroll(ctx, sequence.ID, &fopost.EnrollRequest{
+    ContactIDs: []string{contactID},
+})
+// Nothing further fires for them.
+_, err = client.Sequences.Unenroll(ctx, sequence.ID, []string{contactID})
+```
+
 ## Scopes and limits
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
-`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
-`ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
+`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`
+(which also covers `Knowledge`), `ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
 and the create, update, delete and duplicate calls on campaigns, ad sets and
 network ads spend money and need `publish` as well as `ads`; a boost, ad or new
 campaign object starts paused unless `Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
