@@ -7,7 +7,8 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 Go module `github.com/fopost/fopost-go` — the official Go client for the FoPost REST API
 (`fopost.com`). `fopost.Version` is `0.3.0`. It wraps the API's HTTP surface in services
 hung off `*Client`: `Posts`, `Workspaces`, `Accounts`, `Communities`, `Labels`, `Webhooks`,
-`Analytics`, `Automations`, `Media`, `Inbox`, `Ads`, `Validate`.
+`Analytics`, `Automations`, `Media`, `Inbox`, `Contacts`, `Broadcasts`, `Sequences`, `Ads`,
+`Validate`.
 
 `go 1.22` minimum (the code uses the `min` builtin, so 1.21+ is required regardless).
 **Standard library only** — `go.mod` has no `require` block.
@@ -48,7 +49,7 @@ One flat package `fopost` at the repository root, one file per API group:
 | `errors.go` | `*Error`, `RateLimit`, `APIError`/`StatusOf`/`CodeOf`, `Is*` predicates |
 | `types.go` | `Time`, `PageMeta`, `ContentBlock`, `Text`/`Thread`, `queryBuilder`, `Bool`/`String`/`Int` |
 | `multipart.go` | `buildMultipart` — media upload and CSV bulk import bodies |
-| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `ads.go` `validate.go` | one `*Service` each, with its request/response types |
+| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `contacts.go` `broadcasts.go` `ads.go` `validate.go` | one `*Service` each, with its request/response types |
 | `internal/version/main.go` | prints `fopost.Version` so the release workflow can check it against the tag |
 
 Request flow: a service method builds its query with `newQuery()` and its body as a struct
@@ -80,6 +81,17 @@ for concurrent use.
   otherwise passes the body through. Paginated lists decode `meta` into `PageMeta`
   (`current_page`, `per_page`, `total`, `last_page`, `from`, `to`); the inbox lists carry
   the camelCase `InboxPageMeta` (`page`, `perPage`, `total`) instead.
+- `Broadcasts` and `Sequences` need `inbox` to read; `Send`, `Cancel`, `Enroll` and `Unenroll`
+  also need `publish`, because they reach a platform. Both list envelopes are
+  `{data, pagination}` like contacts, so both reuse `ContactPageMeta`. A recipient's
+  `SkipReason` is the messaging window's record: `SkipWindowClosed` means the network's
+  24-hour window had shut and nothing was attempted, so a sent count lower than the audience
+  is correct rather than a failure.
+- `Contacts` needs `inbox` (a key that may read a message may read who sent it), except
+  `ConversationAnalytics`, which reaches `/analytics/inbox/conversations` and needs `analytics`.
+  Its list envelope is `{data, pagination}` with snake_case keys, not the `{data, meta}` the
+  inbox lists use, so it has its own `ContactPageMeta`. `CreateField` puts the workspace on
+  the query string because the handler reads it from there.
 - Scopes: one per service, named after it. `Validate` needs `posts`; `Inbox` needs `inbox`; `Ads` needs `ads`, and
   `Ads.Boost`/`Create`/`SetStatus`/`Delete`/`SetStatuses` and the create/update/delete/duplicate
   calls on campaigns, ad sets and network ads also need `publish` because they spend money.
