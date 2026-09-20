@@ -267,6 +267,23 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage` |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
+| `Activity`    | `List`                                                                                                                                                            |
+
+`Activity.List` reads what happened in a workspace, newest first.
+`ActivityKindSecurity` is the audit log: members joining, leaving or changing
+role and access, and changes to two-step verification, passkeys, single sign-on
+and signed-in devices. Those rows are append-only and never expire.
+
+```go
+page, err := client.Activity.List(ctx, &fopost.ListActivityParams{
+    WorkspaceID: workspaceID,
+    Kind:        fopost.ActivityKindSecurity,
+})
+for _, event := range page.Events {
+    fmt.Printf("%s %s: %s\n", event.Time, event.Actor.Name, event.Summary)
+}
+// page.NextCursor is empty at the end of the list.
+```
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
 and decodes the body as it came:
