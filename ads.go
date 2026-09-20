@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// AdsService covers Meta ads: boosts and ads created through FoPost, the ad
+// AdsService covers ads across the ad networks: boosts and ads created through FoPost, the ad
 // connections they run on, audiences, targeting search and lead forms. Every
 // method needs the `ads` scope; Boost, Create, SetStatus, Delete, the create,
 // update, delete and duplicate calls on campaigns, ad sets and network ads, and
@@ -357,6 +357,25 @@ func (s *AdsService) AuthorizeMeta(ctx context.Context, body *AuthorizeMetaAdsRe
 		URL string `json:"url"`
 	}
 	if err := s.client.json(ctx, "POST", "/ads/connections/meta/authorize", body, nil, &out); err != nil {
+		return "", err
+	}
+	return out.URL, nil
+}
+
+// AuthorizeGoogleAdsRequest is the body of AuthorizeGoogle.
+type AuthorizeGoogleAdsRequest struct {
+	WorkspaceID string `json:"workspaceId"`
+	// ReturnTo is a dashboard path to land on after Google redirects back.
+	ReturnTo string `json:"returnTo,omitempty"`
+}
+
+// AuthorizeGoogle returns the Google login URL. The caller finishes it in
+// their own browser session: the callback checks the same user came back.
+func (s *AdsService) AuthorizeGoogle(ctx context.Context, body *AuthorizeGoogleAdsRequest) (string, error) {
+	var out struct {
+		URL string `json:"url"`
+	}
+	if err := s.client.json(ctx, "POST", "/ads/connections/google/authorize", body, nil, &out); err != nil {
 		return "", err
 	}
 	return out.URL, nil

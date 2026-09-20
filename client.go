@@ -65,6 +65,7 @@ type Client struct {
 	Sequences     *SequencesService
 	Knowledge     *KnowledgeService
 	Ads           *AdsService
+	GoogleAds     *GoogleAdsService
 	Validate      *ValidateService
 	Activity      *ActivityService
 
@@ -167,6 +168,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Knowledge = &KnowledgeService{client: c}
 	c.Ads = &AdsService{client: c}
 	c.GoogleBusiness = &GoogleBusinessService{client: c}
+	c.GoogleAds = &GoogleAdsService{client: c}
 	c.Validate = &ValidateService{client: c}
 
 	return c, nil
