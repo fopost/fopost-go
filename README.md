@@ -266,6 +266,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `Handover`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage` |
+| `Knowledge`   | `List`, `Create`, `Update`, `Delete`, `Sync`, `Search`                                                                                                           |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
@@ -280,8 +281,8 @@ err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
-`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
-`ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
+`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`
+(which also covers `Knowledge`), `ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
 and the create, update, delete and duplicate calls on campaigns, ad sets and
 network ads spend money and need `publish` as well as `ads`; a boost, ad or new
 campaign object starts paused unless `Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
