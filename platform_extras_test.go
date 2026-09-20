@@ -135,3 +135,44 @@ func TestSearchLinkedInMentionsCarriesTheAnnotation(t *testing.T) {
 		t.Fatalf("mentions = %+v", mentions)
 	}
 }
+
+func TestTikTokMusicSearchPassesTheQueryThrough(t *testing.T) {
+	var query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":[{"id":"m1","title":"Sunrise","author":"Kite"}]}`)
+	})
+
+	tracks, err := client.Accounts.SearchTikTokMusic(context.Background(), "acc_1",
+		TikTokSearchOptions{Query: "sunrise", Limit: 5})
+	if err != nil {
+		t.Fatalf("SearchTikTokMusic: %v", err)
+	}
+	if len(tracks) != 1 || tracks[0].ID != "m1" {
+		t.Fatalf("tracks = %+v", tracks)
+	}
+	if !strings.Contains(query, "q=sunrise") || !strings.Contains(query, "limit=5") {
+		t.Fatalf("query = %q", query)
+	}
+}
+
+func TestTikTokVideoLookupSendsTheShareLink(t *testing.T) {
+	var body string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		body = string(raw)
+		_, _ = io.WriteString(w, `{"data":{"video_id":"7300000000000000000","download_url":"https://www.tiktok.com/@a/video/7300000000000000000"}}`)
+	})
+
+	video, err := client.Accounts.LookupTikTokVideo(context.Background(), "acc_1",
+		"https://www.tiktok.com/@a/video/7300000000000000000")
+	if err != nil {
+		t.Fatalf("LookupTikTokVideo: %v", err)
+	}
+	if video.VideoID != "7300000000000000000" || video.DownloadURL == nil {
+		t.Fatalf("video = %+v", video)
+	}
+	if !strings.Contains(body, "tiktok.com") {
+		t.Fatalf("body = %q", body)
+	}
+}

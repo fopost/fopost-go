@@ -94,6 +94,48 @@ type TikTokCreatorInfo struct {
 	MaxVideoPostDurationSec *int     `json:"max_video_post_duration_sec"`
 }
 
+// TikTokMusic is a track from TikTok's Commercial Music Library. Pass ID as the
+// music_id platform setting to attach it.
+type TikTokMusic struct {
+	ID          string  `json:"id"`
+	Title       string  `json:"title"`
+	Author      *string `json:"author"`
+	DurationSec *int    `json:"duration_sec"`
+	CoverURL    *string `json:"cover_url"`
+	PreviewURL  *string `json:"preview_url"`
+}
+
+// TikTokPlace is a place a post can be tagged with. Pass ID as the location_id
+// platform setting.
+type TikTokPlace struct {
+	ID      string  `json:"id"`
+	Name    string  `json:"name"`
+	Address *string `json:"address"`
+	City    *string `json:"city"`
+	Country *string `json:"country"`
+}
+
+// TikTokSearchOptions narrows a music or place search. Query is required.
+type TikTokSearchOptions struct {
+	Query string
+	// Limit is 1 to 50; the API defaults to 20 when it is zero.
+	Limit int
+}
+
+// TikTokVideoSource is one of the account's own videos, resolved from a share
+// link. TikTok serves no raw media file, so DownloadURL is the share address,
+// which is what a repurpose run reads.
+type TikTokVideoSource struct {
+	VideoID       string  `json:"video_id"`
+	Title         *string `json:"title"`
+	Description   *string `json:"description"`
+	DurationSec   *int    `json:"duration_sec"`
+	CoverImageURL *string `json:"cover_image_url"`
+	ShareURL      *string `json:"share_url"`
+	EmbedLink     *string `json:"embed_link"`
+	DownloadURL   *string `json:"download_url"`
+}
+
 // InstagramAudio is a track a Reel can carry. Pass ID as the audio_id platform
 // setting to attach it.
 type InstagramAudio struct {
@@ -273,6 +315,51 @@ func (s *AccountsService) GetTikTokCreatorInfo(ctx context.Context, id string) (
 		return nil, err
 	}
 	return out, nil
+}
+
+// SearchTikTokMusic searches TikTok's Commercial Music Library. It needs the
+// Marketing API product on the TikTok app; without it the call fails with 403
+// rather than answering an empty list.
+func (s *AccountsService) SearchTikTokMusic(ctx context.Context, id string, opts TikTokSearchOptions) ([]TikTokMusic, error) {
+	var out []TikTokMusic
+	path := "/accounts/" + url.PathEscape(id) + "/tiktok/music"
+	if err := s.client.json(ctx, "GET", path, nil, tiktokSearchQuery(opts), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SearchTikTokLocations searches the places a post can be tagged with. Same
+// TikTok product as the music library.
+func (s *AccountsService) SearchTikTokLocations(ctx context.Context, id string, opts TikTokSearchOptions) ([]TikTokPlace, error) {
+	var out []TikTokPlace
+	path := "/accounts/" + url.PathEscape(id) + "/tiktok/locations"
+	if err := s.client.json(ctx, "GET", path, nil, tiktokSearchQuery(opts), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// LookupTikTokVideo resolves a share link to one of this account's own videos,
+// for repurposing. A link to someone else's video answers 404.
+func (s *AccountsService) LookupTikTokVideo(ctx context.Context, id, shareURL string) (*TikTokVideoSource, error) {
+	out := &TikTokVideoSource{}
+	path := "/accounts/" + url.PathEscape(id) + "/tiktok/video-download"
+	if err := s.client.json(ctx, "POST", path, map[string]any{"url": shareURL}, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func tiktokSearchQuery(opts TikTokSearchOptions) url.Values {
+	query := url.Values{}
+	if opts.Query != "" {
+		query.Set("q", opts.Query)
+	}
+	if opts.Limit > 0 {
+		query.Set("limit", strconv.Itoa(opts.Limit))
+	}
+	return query
 }
 
 // SearchInstagramAudio returns tracks a Reel can carry.
