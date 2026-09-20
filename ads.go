@@ -80,6 +80,10 @@ type AdTargeting struct {
 	Interests   []AdTargetingItem     `json:"interests,omitempty"`
 	Behaviors   []AdTargetingItem     `json:"behaviors,omitempty"`
 	Income      []AdTargetingItem     `json:"income,omitempty"`
+	// Facets are the facets a network defines for itself, keyed by the
+	// targeting search type they were found with. Providers reports which a
+	// network accepts.
+	Facets map[string][]AdTargetingItem `json:"facets,omitempty"`
 }
 
 // AdBudget is what an ad may spend. Minor is in the ad account currency's
@@ -191,12 +195,14 @@ type AdPageRef struct {
 // AdSource is a connection with the ad accounts and Pages its grant reaches.
 // Error is set when Meta refused the listing, usually a revoked grant.
 type AdSource struct {
-	ConnectionID string         `json:"connectionId"`
-	Name         string         `json:"name"`
-	WorkspaceID  string         `json:"workspaceId"`
-	AdAccounts   []AdAccountRef `json:"adAccounts"`
-	Pages        []AdPageRef    `json:"pages"`
-	Error        string         `json:"error"`
+	ConnectionID string `json:"connectionId"`
+	// Provider is the ad network this connection belongs to.
+	Provider    string         `json:"provider"`
+	Name        string         `json:"name"`
+	WorkspaceID string         `json:"workspaceId"`
+	AdAccounts  []AdAccountRef `json:"adAccounts"`
+	Pages       []AdPageRef    `json:"pages"`
+	Error       string         `json:"error"`
 }
 
 // BoostableDelivery is one published delivery a boost can be built from.
@@ -340,6 +346,63 @@ func (s *AdsService) Sources(ctx context.Context, workspaceID string) ([]AdSourc
 	return out, nil
 }
 
+// AdProvider is an ad network from the API's registry. Configured false
+// cannot be connected yet.
+type AdProvider struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Logo is the logo slug.
+	Logo       string `json:"logo"`
+	Configured bool   `json:"configured"`
+	// ConnectMethods are the login routes this deployment can offer.
+	ConnectMethods []string `json:"connectMethods"`
+	// Capabilities says what the network supports: campaigns, audiences,
+	// conversions, forecasts, adLibrary, and so on.
+	Capabilities map[string]bool `json:"capabilities"`
+	// TargetingFacets is what SearchTargeting accepts here, in picker order.
+	TargetingFacets []string `json:"targetingFacets"`
+	// TrackingMacros are expanded inside a creative's tracking parameters.
+	TrackingMacros []AdTrackingMacro `json:"trackingMacros"`
+}
+
+// AdTrackingMacro is a token a network expands at delivery time.
+type AdTrackingMacro struct {
+	Token       string `json:"token"`
+	Description string `json:"description"`
+}
+
+// Providers lists the ad networks this deployment knows, with what each one
+// supports.
+func (s *AdsService) Providers(ctx context.Context) ([]AdProvider, error) {
+	var out []AdProvider
+	if err := s.client.json(ctx, "GET", "/ads/providers", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AuthorizeAdsRequest is the body of Authorize.
+type AuthorizeAdsRequest struct {
+	WorkspaceID string `json:"workspaceId"`
+	// Method is one of the network's own ConnectMethods; the first by default.
+	Method string `json:"method,omitempty"`
+	// ReturnTo is the dashboard path to land on after the network redirects back.
+	ReturnTo string `json:"returnTo,omitempty"`
+}
+
+// Authorize returns the network's login URL; the caller finishes it in a
+// browser.
+func (s *AdsService) Authorize(ctx context.Context, provider string, body *AuthorizeAdsRequest) (string, error) {
+	var out struct {
+		URL string `json:"url"`
+	}
+	path := "/ads/connections/" + url.PathEscape(provider) + "/authorize"
+	if err := s.client.json(ctx, "POST", path, body, nil, &out); err != nil {
+		return "", err
+	}
+	return out.URL, nil
+}
+
 // AuthorizeMetaAdsRequest is the body of AuthorizeMeta.
 type AuthorizeMetaAdsRequest struct {
 	WorkspaceID string `json:"workspaceId"`
@@ -352,14 +415,17 @@ type AuthorizeMetaAdsRequest struct {
 
 // AuthorizeMeta returns the Meta login URL; the caller finishes it in a
 // browser.
+//
+// Deprecated: use Authorize with the provider id "meta".
 func (s *AdsService) AuthorizeMeta(ctx context.Context, body *AuthorizeMetaAdsRequest) (string, error) {
-	var out struct {
-		URL string `json:"url"`
+	if body == nil {
+		return s.Authorize(ctx, "meta", nil)
 	}
-	if err := s.client.json(ctx, "POST", "/ads/connections/meta/authorize", body, nil, &out); err != nil {
-		return "", err
-	}
-	return out.URL, nil
+	return s.Authorize(ctx, "meta", &AuthorizeAdsRequest{
+		WorkspaceID: body.WorkspaceID,
+		Method:      body.Method,
+		ReturnTo:    body.ReturnTo,
+	})
 }
 
 // DeleteConnection removes a connection and every ad record created through
