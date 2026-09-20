@@ -189,6 +189,7 @@ const (
 	PlatformMastodon          = "mastodon"
 	PlatformLemmy             = "lemmy"
 	PlatformPinterest         = "pinterest"
+	PlatformSnapchat          = "snapchat"
 	PlatformTelegram          = "telegram"
 	PlatformTwitch            = "twitch"
 	PlatformDiscord           = "discord"
