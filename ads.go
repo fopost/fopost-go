@@ -423,7 +423,12 @@ type CreateAdRequest struct {
 	// URLTags is a query string appended to every link in the ad, e.g.
 	// `utm_source=meta&utm_medium=paid`.
 	URLTags string `json:"urlTags,omitempty"`
-	Paused  *bool  `json:"paused,omitempty"`
+	// SparkPostID runs a post already live on the network as a Spark ad, from
+	// SparkPosts. The post carries its own caption and media, so Text,
+	// Headline and MediaURL are ignored. Needs the network's `sparkAds`
+	// capability.
+	SparkPostID string `json:"sparkPostId,omitempty"`
+	Paused      *bool  `json:"paused,omitempty"`
 }
 
 // Create makes an ad from scratch. Needs the `publish` scope as well as `ads`.
@@ -746,6 +751,9 @@ type CreateCampaignRequest struct {
 	// Goal is one of the AdGoal constants.
 	Goal   string `json:"goal"`
 	Paused *bool  `json:"paused,omitempty"`
+	// SmartPlus hands targeting and creative rotation to the network. Needs
+	// its `smartPlus` capability.
+	SmartPlus *bool `json:"smartPlus,omitempty"`
 }
 
 // UpdateCampaignRequest is the body of UpdateCampaign. Status is
@@ -1382,4 +1390,207 @@ func (s *AdsService) SubscribeLeadPage(ctx context.Context, body *SubscribeLeadP
 // UnsubscribeLeadPage stops collecting a Page's leads.
 func (s *AdsService) UnsubscribeLeadPage(ctx context.Context, pageID string, params *AdObjectParams) error {
 	return s.client.Do(ctx, "DELETE", "/ads/lead-pages/"+url.PathEscape(pageID), nil, params.query(), nil)
+}
+
+// ─── Identities, Spark posts, conversions and ad comments ───────────
+
+// AdBusinessCenter is a Business Center, or the network's equivalent grouping
+// of ad accounts.
+type AdBusinessCenter struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+// AdIdentity is the account an ad runs as. Meta calls it a Page, TikTok an
+// identity; an identity id is what every route calls a PageID.
+type AdIdentity struct {
+	ID string `json:"id"`
+	// Type is the network's own identity kind, e.g. `CUSTOMIZED_USER`.
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	AvatarURL string `json:"avatarUrl"`
+}
+
+// SparkPost is a post already live on the network, offered as the source of a
+// Spark ad.
+type SparkPost struct {
+	ID           string `json:"id"`
+	IdentityID   string `json:"identityId"`
+	Caption      string `json:"caption"`
+	ThumbnailURL string `json:"thumbnailUrl"`
+	CreatedAt    string `json:"createdAt"`
+	Views        *int   `json:"views"`
+}
+
+// AdComment is a comment on an ad, read live from the network and never stored.
+type AdComment struct {
+	ID              string `json:"id"`
+	AdID            string `json:"adId"`
+	Text            string `json:"text"`
+	AuthorName      string `json:"authorName"`
+	AuthorAvatarURL string `json:"authorAvatarUrl"`
+	CreatedAt       string `json:"createdAt"`
+	Likes           int    `json:"likes"`
+	ReplyCount      int    `json:"replyCount"`
+	Hidden          bool   `json:"hidden"`
+	// ParentID is the comment this one answers, when it is not on the ad itself.
+	ParentID string `json:"parentId"`
+}
+
+// AdCommentsPage is one page of an ad's comments; pass NextCursor back as After.
+type AdCommentsPage struct {
+	Comments   []AdComment `json:"comments"`
+	NextCursor string      `json:"nextCursor"`
+}
+
+// ConversionEvent is one offline conversion. Email and Phone are hashed by the
+// API before anything leaves FoPost.
+type ConversionEvent struct {
+	EventName string `json:"eventName"`
+	// OccurredAt is ISO 8601.
+	OccurredAt string `json:"occurredAt"`
+	Email      string `json:"email,omitempty"`
+	Phone      string `json:"phone,omitempty"`
+	// ValueMinor is the account currency in minor units.
+	ValueMinor *int   `json:"valueMinor,omitempty"`
+	Currency   string `json:"currency,omitempty"`
+	OrderID    string `json:"orderId,omitempty"`
+}
+
+// UploadConversionsRequest is the body of UploadConversions.
+type UploadConversionsRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	AdAccountID  string `json:"adAccountId"`
+	// PixelID has to be a pixel the ad account owns, from Audiences.
+	PixelID string `json:"pixelId"`
+	// Events is up to 1000 per call.
+	Events []ConversionEvent `json:"events"`
+}
+
+// AdCommentRequest scopes a comment write. The comment id travels in the path.
+type AdCommentRequest struct {
+	WorkspaceID  string `json:"workspaceId"`
+	ConnectionID string `json:"connectionId"`
+	AdID         string `json:"adId"`
+	// Text is the reply, on ReplyToComment only.
+	Text string `json:"text,omitempty"`
+	// Hidden is the new state, on SetCommentHidden only.
+	Hidden *bool `json:"hidden,omitempty"`
+}
+
+// ListSparkPostsParams names the identity whose posts to list.
+type ListSparkPostsParams struct {
+	WorkspaceID  string
+	ConnectionID string
+	AdAccountID  string
+	IdentityID   string
+}
+
+// ListAdCommentsParams names the ad whose comments to read.
+type ListAdCommentsParams struct {
+	WorkspaceID  string
+	ConnectionID string
+	AdID         string
+	// After is the previous page's NextCursor.
+	After string
+}
+
+// TikTokBusinessCenters lists TikTok's Business Centers. It is the one
+// network-named read on this service, because no other network groups ad
+// accounts this way.
+func (s *AdsService) TikTokBusinessCenters(ctx context.Context, params *AdObjectParams) ([]AdBusinessCenter, error) {
+	var out []AdBusinessCenter
+	if err := s.client.json(ctx, "GET", "/ads/tiktok/business-centers", nil, params.query(), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TikTokIdentities lists the accounts an ad can run as on one ad account.
+func (s *AdsService) TikTokIdentities(ctx context.Context, params *ListAudiencesParams) ([]AdIdentity, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("connection_id", params.ConnectionID)
+		q.str("ad_account_id", params.AdAccountID)
+	}
+	var out []AdIdentity
+	if err := s.client.json(ctx, "GET", "/ads/tiktok/identities", nil, q.values(), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SparkPosts lists the posts already live under an identity, each a candidate
+// Spark ad.
+func (s *AdsService) SparkPosts(ctx context.Context, params *ListSparkPostsParams) ([]SparkPost, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("connection_id", params.ConnectionID)
+		q.str("ad_account_id", params.AdAccountID)
+		q.str("identity_id", params.IdentityID)
+	}
+	var out []SparkPost
+	if err := s.client.json(ctx, "GET", "/ads/spark-posts", nil, q.values(), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UploadConversions sends offline conversions against one of the ad account's
+// pixels and returns how many the network accepted.
+func (s *AdsService) UploadConversions(ctx context.Context, body *UploadConversionsRequest) (int, error) {
+	var out struct {
+		Accepted int `json:"accepted"`
+	}
+	if err := s.client.json(ctx, "POST", "/ads/conversions", body, nil, &out); err != nil {
+		return 0, err
+	}
+	return out.Accepted, nil
+}
+
+// Comments reads one page of an ad's comments.
+func (s *AdsService) Comments(ctx context.Context, params *ListAdCommentsParams) (*AdCommentsPage, error) {
+	q := newQuery()
+	if params != nil {
+		q.str("workspace_id", params.WorkspaceID)
+		q.str("connection_id", params.ConnectionID)
+		q.str("ad_id", params.AdID)
+		q.str("after", params.After)
+	}
+	out := &AdCommentsPage{}
+	if err := s.client.json(ctx, "GET", "/ads/comments", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ReplyToComment answers a comment on an ad and returns the reply's id on the
+// network. Needs `publish` as well as `ads`.
+func (s *AdsService) ReplyToComment(ctx context.Context, commentID string, body *AdCommentRequest) (string, error) {
+	var out struct {
+		ReplyID string `json:"replyId"`
+	}
+	path := "/ads/comments/" + url.PathEscape(commentID) + "/reply"
+	if err := s.client.json(ctx, "POST", path, body, nil, &out); err != nil {
+		return "", err
+	}
+	return out.ReplyID, nil
+}
+
+// SetCommentHidden hides or shows a comment on an ad. Needs `publish` as well
+// as `ads`.
+func (s *AdsService) SetCommentHidden(ctx context.Context, commentID string, body *AdCommentRequest) error {
+	path := "/ads/comments/" + url.PathEscape(commentID) + "/hide"
+	return s.client.json(ctx, "POST", path, body, nil, nil)
+}
+
+// DeleteComment removes a comment from the ad on the network. One already gone
+// succeeds. Needs `publish` as well as `ads`.
+func (s *AdsService) DeleteComment(ctx context.Context, commentID string, body *AdCommentRequest) error {
+	path := "/ads/comments/" + url.PathEscape(commentID)
+	return s.client.json(ctx, "DELETE", path, body, nil, nil)
 }
