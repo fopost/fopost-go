@@ -131,10 +131,13 @@ type InboxItem struct {
 	CanSendMedia  bool `json:"canSendMedia"`
 	CanQuickReply bool `json:"canQuickReply"`
 	// CanPrivateReply means StartConversation can answer this comment by DM.
-	CanPrivateReply bool              `json:"canPrivateReply"`
-	Post            *InboxPostRef     `json:"post"`
-	PostContext     *InboxPostContext `json:"postContext"`
-	Account         *InboxAccountRef  `json:"account"`
+	CanPrivateReply bool `json:"canPrivateReply"`
+	// ModerationStatus is the platform's own state for a comment: "published",
+	// "held", "spam" or "rejected". Empty where the platform does not report one.
+	ModerationStatus string            `json:"moderationStatus"`
+	Post             *InboxPostRef     `json:"post"`
+	PostContext      *InboxPostContext `json:"postContext"`
+	Account          *InboxAccountRef  `json:"account"`
 }
 
 // InboxThread is one platform post with comments, one post the account was
@@ -190,6 +193,9 @@ type InboxAccount struct {
 	DMPendingReason string `json:"dmPendingReason"`
 	// CanStartConversation means a new DM can be opened from this account by handle.
 	CanStartConversation bool `json:"canStartConversation"`
+	// ReconnectRequired means the grant predates a permission the inbox read
+	// needs; the account is not polled until someone reconnects it.
+	ReconnectRequired bool `json:"reconnectRequired"`
 }
 
 // InboxPlatform is one network and its inbox support. Comments and DMs are
