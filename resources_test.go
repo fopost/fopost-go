@@ -1138,7 +1138,7 @@ func TestAccountsDiscordRoutes(t *testing.T) {
 		raw = string(b)
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/discord/channels"):
-			_, _ = io.WriteString(w, `{"data":[{"id":"c2","name":"launches","type":0,"parent_id":null,"nsfw":false,"is_current":true}]}`)
+			_, _ = io.WriteString(w, `{"data":[{"id":"c2","name":"launches","type":0,"parent_id":null,"nsfw":false,"can_post":true,"is_current":true}]}`)
 		case strings.HasSuffix(r.URL.Path, "/channels/current"):
 			_, _ = io.WriteString(w, `{"data":{"id":"c2","name":"launches","is_current":true}}`)
 		case strings.HasSuffix(r.URL.Path, "/discord/members"):
