@@ -637,6 +637,39 @@ func (s *InboxService) SetTyping(ctx context.Context, conversationID, accountID 
 	return out.Typing, nil
 }
 
+// InboxHandover is the outcome of a Messenger thread hand-over. AppID is empty
+// when control was taken back.
+type InboxHandover struct {
+	AppID   string `json:"app_id"`
+	Control string `json:"control"`
+}
+
+// HandoverOptions carries the optional parts of a hand-over. An empty AppID
+// takes control back instead of passing it.
+type HandoverOptions struct {
+	AppID    string
+	Metadata string
+}
+
+// Handover passes a Messenger thread to another Meta app, or takes it back when
+// opts is nil or its AppID is empty. Also needs the publish scope.
+func (s *InboxService) Handover(ctx context.Context, conversationID, accountID string, opts *HandoverOptions) (*InboxHandover, error) {
+	body := map[string]any{"account_id": accountID}
+	if opts != nil {
+		if opts.AppID != "" {
+			body["app_id"] = opts.AppID
+		}
+		if opts.Metadata != "" {
+			body["metadata"] = opts.Metadata
+		}
+	}
+	out := &InboxHandover{}
+	if err := s.client.json(ctx, "POST", "/inbox/conversations/"+url.PathEscape(conversationID)+"/handover", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ListApprovals returns drafted replies a person still has to send, optionally
 // narrowed to one workspace.
 func (s *InboxService) ListApprovals(ctx context.Context, workspaceID string) ([]InboxApproval, error) {
