@@ -488,6 +488,169 @@ func (s *AccountsService) UpdateSlackIdentity(ctx context.Context, id string, bo
 	return out, nil
 }
 
+// ─── Meta messaging settings (Facebook Pages, Instagram) ─────────
+
+// MetaIceBreaker is a tappable prompt shown before the first message.
+type MetaIceBreaker struct {
+	// Question is up to 80 characters.
+	Question string `json:"question"`
+	// Payload is what the webhook receives when the prompt is tapped.
+	Payload string `json:"payload"`
+}
+
+// MetaIceBreakers is the set of ice breakers on one account.
+type MetaIceBreakers struct {
+	IceBreakers []MetaIceBreaker `json:"ice_breakers"`
+}
+
+// MetaMenuItem is a persistent-menu item: a "postback" carrying Payload, or a
+// "web_url" carrying URL.
+type MetaMenuItem struct {
+	Type  string `json:"type"`
+	Title string `json:"title"`
+	// Payload is set on a postback item.
+	Payload string `json:"payload,omitempty"`
+	// URL is set on a web_url item and must be http(s).
+	URL string `json:"url,omitempty"`
+}
+
+// MetaPersistentMenuEntry is one locale's menu; "default" is the fallback.
+type MetaPersistentMenuEntry struct {
+	Locale                string         `json:"locale"`
+	CallToActions         []MetaMenuItem `json:"call_to_actions"`
+	ComposerInputDisabled *bool          `json:"composer_input_disabled,omitempty"`
+}
+
+// MetaPersistentMenu is the menu on one account, one entry per locale.
+type MetaPersistentMenu struct {
+	PersistentMenu []MetaPersistentMenuEntry `json:"persistent_menu"`
+}
+
+// MetaGreetingText is one locale's greeting, up to 160 characters.
+type MetaGreetingText struct {
+	Locale string `json:"locale"`
+	Text   string `json:"text"`
+}
+
+// MetaGreeting is the greeting on one account, one entry per locale.
+type MetaGreeting struct {
+	Greeting []MetaGreetingText `json:"greeting"`
+}
+
+// WebhookSubscription is what the network delivers to the FoPost webhook for
+// one account. Subscribed is false when it lapsed or a field is missing.
+type WebhookSubscription struct {
+	Subscribed    bool     `json:"subscribed"`
+	Fields        []string `json:"fields"`
+	MissingFields []string `json:"missing_fields"`
+}
+
+// GetIceBreakers returns the prompts shown before the first message. A network
+// without them answers 400.
+func (s *AccountsService) GetIceBreakers(ctx context.Context, id string) (*MetaIceBreakers, error) {
+	out := &MetaIceBreakers{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/messaging/ice-breakers", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetIceBreakers replaces the ice breakers, up to four.
+func (s *AccountsService) SetIceBreakers(ctx context.Context, id string, iceBreakers []MetaIceBreaker) (*MetaIceBreakers, error) {
+	body := MetaIceBreakers{IceBreakers: iceBreakers}
+	out := &MetaIceBreakers{}
+	if err := s.client.json(ctx, "PUT", "/accounts/"+url.PathEscape(id)+"/messaging/ice-breakers", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteIceBreakers clears the ice breakers.
+func (s *AccountsService) DeleteIceBreakers(ctx context.Context, id string) (*MetaIceBreakers, error) {
+	out := &MetaIceBreakers{}
+	if err := s.client.json(ctx, "DELETE", "/accounts/"+url.PathEscape(id)+"/messaging/ice-breakers", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetPersistentMenu returns the always-visible Messenger menu. Facebook Pages
+// only; other networks answer 400.
+func (s *AccountsService) GetPersistentMenu(ctx context.Context, id string) (*MetaPersistentMenu, error) {
+	out := &MetaPersistentMenu{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/messaging/persistent-menu", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetPersistentMenu replaces the menu, one entry per locale, up to three items each.
+func (s *AccountsService) SetPersistentMenu(ctx context.Context, id string, menu []MetaPersistentMenuEntry) (*MetaPersistentMenu, error) {
+	body := MetaPersistentMenu{PersistentMenu: menu}
+	out := &MetaPersistentMenu{}
+	if err := s.client.json(ctx, "PUT", "/accounts/"+url.PathEscape(id)+"/messaging/persistent-menu", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeletePersistentMenu clears the menu.
+func (s *AccountsService) DeletePersistentMenu(ctx context.Context, id string) (*MetaPersistentMenu, error) {
+	out := &MetaPersistentMenu{}
+	if err := s.client.json(ctx, "DELETE", "/accounts/"+url.PathEscape(id)+"/messaging/persistent-menu", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetGreeting returns the text shown before a Messenger conversation starts.
+// Facebook Pages only.
+func (s *AccountsService) GetGreeting(ctx context.Context, id string) (*MetaGreeting, error) {
+	out := &MetaGreeting{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/messaging/greeting", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetGreeting replaces the greeting, one entry per locale.
+func (s *AccountsService) SetGreeting(ctx context.Context, id string, greeting []MetaGreetingText) (*MetaGreeting, error) {
+	body := MetaGreeting{Greeting: greeting}
+	out := &MetaGreeting{}
+	if err := s.client.json(ctx, "PUT", "/accounts/"+url.PathEscape(id)+"/messaging/greeting", body, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// DeleteGreeting clears the greeting.
+func (s *AccountsService) DeleteGreeting(ctx context.Context, id string) (*MetaGreeting, error) {
+	out := &MetaGreeting{}
+	if err := s.client.json(ctx, "DELETE", "/accounts/"+url.PathEscape(id)+"/messaging/greeting", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetWebhookSubscription reports what the network is delivering to the FoPost
+// webhook for this account.
+func (s *AccountsService) GetWebhookSubscription(ctx context.Context, id string) (*WebhookSubscription, error) {
+	out := &WebhookSubscription{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/webhook-subscription", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ResubscribeWebhook subscribes to every field this account needs, lapsed or not.
+func (s *AccountsService) ResubscribeWebhook(ctx context.Context, id string) (*WebhookSubscription, error) {
+	out := &WebhookSubscription{}
+	if err := s.client.json(ctx, "POST", "/accounts/"+url.PathEscape(id)+"/webhook-subscription", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ─── Discord (bot connections) ─────────────────────────────────────
 //
 // A Discord account connected with a webhook has no bot to act as: every route
