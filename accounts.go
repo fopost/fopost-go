@@ -300,6 +300,60 @@ func (s *AccountsService) Analytics(ctx context.Context, id string, limit int) (
 	return out, nil
 }
 
+// PlatformMetricRow is one metric a network reports under its own name. Key is
+// the platform's own name and is stable; Label is ours and may be reworded.
+// Value is a number for every Kind but "series", which is an array of points.
+type PlatformMetricRow struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	// Kind is one of count, duration_ms, currency_usd, ratio, series.
+	Kind  string          `json:"kind"`
+	Value json.RawMessage `json:"value"`
+}
+
+// Number decodes Value as a number. It reports false for a series, or for a
+// metric the network answered as anything but a number.
+func (r PlatformMetricRow) Number() (float64, bool) {
+	var n float64
+	if err := json.Unmarshal(r.Value, &n); err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// PlatformMetricsBlock is one side of a metric set: the account itself, or its
+// newest measured post. ExternalPostID is empty on the account side.
+type PlatformMetricsBlock struct {
+	FetchedAt      Time                `json:"fetched_at"`
+	ExternalPostID string              `json:"external_post_id"`
+	Metrics        []PlatformMetricRow `json:"metrics"`
+}
+
+// AccountPlatformMetrics is what only this network reports, in its own
+// vocabulary: ad-break earnings, story taps, a retention curve, the search
+// terms behind a listing.
+type AccountPlatformMetrics struct {
+	Platform string               `json:"platform"`
+	Account  PlatformMetricsBlock `json:"account"`
+	Post     PlatformMetricsBlock `json:"post"`
+}
+
+// PlatformMetrics returns the account's per-network metric set, keyed by the
+// platform's own metric names and read from the newest collected snapshot
+// rather than fetched live. It needs the analytics scope.
+//
+// A network whose metric access has not been granted yet answers 503
+// (platform_metrics_unavailable) rather than an empty set.
+func (s *AccountsService) PlatformMetrics(ctx context.Context, id string) (*AccountPlatformMetrics, error) {
+	q := newQuery()
+	q.str("raw", "true")
+	out := &AccountPlatformMetrics{}
+	if err := s.client.json(ctx, "GET", "/accounts/"+url.PathEscape(id)+"/insights", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TelegramConnectCode is a one-time code that connects a Telegram chat.
 type TelegramConnectCode struct {
 	Code string `json:"code"`
