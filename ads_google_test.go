@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -137,5 +138,66 @@ func TestAuthorizeGoogleHasItsOwnRoute(t *testing.T) {
 	}
 	if url != "https://accounts.google.com/o/x" || path != "/ads/connections/google/authorize" {
 		t.Fatalf("url = %q, path = %q", url, path)
+	}
+}
+
+func TestGoogleRecommendationsJoinsTheTypesFilter(t *testing.T) {
+	var types string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		types = r.URL.Query().Get("types")
+		_, _ = io.WriteString(w, `{"data":[{"id":"customers/1234567890/recommendations/ABC~1",`+
+			`"type":"KEYWORD","impact":{"baseClicks":10,"potentialClicks":25}}]}`)
+	})
+
+	rows, err := client.GoogleAds.Recommendations(
+		context.Background(), googleScope, []string{"KEYWORD", "TARGET_CPA_OPT_IN"})
+	if err != nil {
+		t.Fatalf("GoogleAds.Recommendations: %v", err)
+	}
+	if types != "KEYWORD,TARGET_CPA_OPT_IN" {
+		t.Fatalf("types = %q", types)
+	}
+	if rows[0].Impact == nil || *rows[0].Impact.PotentialClicks != 25 {
+		t.Fatalf("impact = %+v", rows[0].Impact)
+	}
+}
+
+func TestGoogleRecommendationsOmitsTypesWhenNoneGiven(t *testing.T) {
+	var raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		raw = r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":[]}`)
+	})
+
+	if _, err := client.GoogleAds.Recommendations(context.Background(), googleScope, nil); err != nil {
+		t.Fatalf("GoogleAds.Recommendations: %v", err)
+	}
+	if strings.Contains(raw, "types=") {
+		t.Fatalf("query = %q", raw)
+	}
+}
+
+func TestApplyGoogleRecommendationsSendsTheIDs(t *testing.T) {
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"applied":1}}`)
+	})
+
+	applied, err := client.GoogleAds.ApplyRecommendations(
+		context.Background(),
+		&GoogleRecommendationsRequest{
+			GoogleScope: googleScope,
+			IDs:         []string{"customers/1234567890/recommendations/ABC~1"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("GoogleAds.ApplyRecommendations: %v", err)
+	}
+	if applied != 1 {
+		t.Fatalf("applied = %d", applied)
+	}
+	if got := body["ids"].([]any); got[0] != "customers/1234567890/recommendations/ABC~1" {
+		t.Fatalf("ids = %+v", got)
 	}
 }
