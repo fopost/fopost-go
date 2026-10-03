@@ -90,7 +90,7 @@ func TestAdsConversionEventsSendTheIdentityTheAPIHashes(t *testing.T) {
 		context.Background(),
 		"urn:li:conversion:9",
 		&AdObjectParams{WorkspaceID: "ws_1", ConnectionID: "conn_1"},
-		[]ConversionEvent{{HappenedAt: 1758326400000, Email: "buyer@example.test"}},
+		[]ConversionAPIEvent{{HappenedAt: 1758326400000, Email: "buyer@example.test"}},
 	)
 	if err != nil {
 		t.Fatalf("Ads.SendConversionEvents: %v", err)

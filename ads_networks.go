@@ -263,10 +263,11 @@ func (s *AdsService) ConversionMetrics(ctx context.Context, id string, params *C
 	return &out, nil
 }
 
-// ConversionEvent is one conversion sent back to the network. It needs an
-// Email or a ClickID. The address is hashed inside the API, so the network
-// never receives it and nothing about an event is stored.
-type ConversionEvent struct {
+// ConversionAPIEvent is one conversion sent back through a network's
+// conversions API, against a rule rather than a pixel. It needs an Email or a
+// ClickID. The address is hashed inside the API, so the network never receives
+// it and nothing about an event is stored.
+type ConversionAPIEvent struct {
 	// HappenedAt is epoch milliseconds.
 	HappenedAt int64  `json:"happenedAt"`
 	ValueMinor int    `json:"valueMinor,omitempty"`
@@ -280,8 +281,8 @@ type ConversionEvent struct {
 
 // SendConversionEvents sends conversions back to the network and returns how
 // many it took. At most 100 per call.
-func (s *AdsService) SendConversionEvents(ctx context.Context, id string, params *AdObjectParams, events []ConversionEvent) (int, error) {
-	body := map[string][]ConversionEvent{"events": events}
+func (s *AdsService) SendConversionEvents(ctx context.Context, id string, params *AdObjectParams, events []ConversionAPIEvent) (int, error) {
+	body := map[string][]ConversionAPIEvent{"events": events}
 	var out struct {
 		Accepted int `json:"accepted"`
 	}
