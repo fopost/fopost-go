@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// AdsService covers Meta ads: boosts and ads created through FoPost, the ad
+// AdsService covers ads across the ad networks: boosts and ads created through FoPost, the ad
 // connections they run on, audiences, targeting search and lead forms. Every
 // method needs the `ads` scope; Boost, Create, SetStatus, Delete, the create,
 // update, delete and duplicate calls on campaigns, ad sets and network ads, and
@@ -362,6 +362,25 @@ func (s *AdsService) AuthorizeMeta(ctx context.Context, body *AuthorizeMetaAdsRe
 	return out.URL, nil
 }
 
+// AuthorizeGoogleAdsRequest is the body of AuthorizeGoogle.
+type AuthorizeGoogleAdsRequest struct {
+	WorkspaceID string `json:"workspaceId"`
+	// ReturnTo is a dashboard path to land on after Google redirects back.
+	ReturnTo string `json:"returnTo,omitempty"`
+}
+
+// AuthorizeGoogle returns the Google login URL. The caller finishes it in
+// their own browser session: the callback checks the same user came back.
+func (s *AdsService) AuthorizeGoogle(ctx context.Context, body *AuthorizeGoogleAdsRequest) (string, error) {
+	var out struct {
+		URL string `json:"url"`
+	}
+	if err := s.client.json(ctx, "POST", "/ads/connections/google/authorize", body, nil, &out); err != nil {
+		return "", err
+	}
+	return out.URL, nil
+}
+
 // DeleteConnection removes a connection and every ad record created through
 // it.
 func (s *AdsService) DeleteConnection(ctx context.Context, id, workspaceID string) error {
@@ -423,12 +442,20 @@ type CreateAdRequest struct {
 	// URLTags is a query string appended to every link in the ad, e.g.
 	// `utm_source=meta&utm_medium=paid`.
 	URLTags string `json:"urlTags,omitempty"`
+	Paused  *bool  `json:"paused,omitempty"`
+	// MessagingDestination is required by the "messages" goal: one of the
+	// Messaging constants.
+	MessagingDestination string `json:"messagingDestination,omitempty"`
+	// PhoneNumber is required by the "calls" goal, in E.164, e.g. "+14155550123".
+	PhoneNumber string `json:"phoneNumber,omitempty"`
+	// ProductSetID is required by the "sales" goal: makes this a catalog ad over
+	// that product set.
+	ProductSetID string `json:"productSetId,omitempty"`
 	// SparkPostID runs a post already live on the network as a Spark ad, from
 	// SparkPosts. The post carries its own caption and media, so Text,
 	// Headline and MediaURL are ignored. Needs the network's `sparkAds`
 	// capability.
 	SparkPostID string `json:"sparkPostId,omitempty"`
-	Paused      *bool  `json:"paused,omitempty"`
 }
 
 // Create makes an ad from scratch. Needs the `publish` scope as well as `ads`.
@@ -817,6 +844,14 @@ type CreateAdSetRequest struct {
 	Budget    AdBudget    `json:"budget"`
 	Targeting AdTargeting `json:"targeting"`
 	Paused    *bool       `json:"paused,omitempty"`
+	// MessagingDestination is required by the "messages" goal: one of the
+	// Messaging constants.
+	MessagingDestination string `json:"messagingDestination,omitempty"`
+	// PhoneNumber is required by the "calls" goal, in E.164, e.g. "+14155550123".
+	PhoneNumber string `json:"phoneNumber,omitempty"`
+	// ProductSetID is required by the "sales" goal: the product set the catalog
+	// ad runs from.
+	ProductSetID string `json:"productSetId,omitempty"`
 }
 
 // UpdateAdSetRequest is the body of UpdateAdSet. BudgetMinor keeps the budget
@@ -1054,6 +1089,17 @@ type CreateCreativeRequest struct {
 	// ThumbnailMediaURL is a video's poster frame, as a library image.
 	ThumbnailMediaURL string         `json:"thumbnailMediaUrl,omitempty"`
 	Cards             []CarouselCard `json:"cards,omitempty"`
+	// ProductSetID is required for the "catalog" format: the network fills the
+	// cards from this product set.
+	ProductSetID string `json:"productSetId,omitempty"`
+	// Description is the per-product line under the headline, "catalog" only.
+	Description string `json:"description,omitempty"`
+	// CreatorPostID is required for the "partnership" format: the creator's
+	// media id, or their Page post as `{page}_{post}`.
+	CreatorPostID string `json:"creatorPostId,omitempty"`
+	// CreatorInstagramUserID is the creator's Instagram account, "partnership"
+	// only.
+	CreatorInstagramUserID string `json:"creatorInstagramUserId,omitempty"`
 }
 
 // CreateCreative adds an image, video or carousel creative to an ad account.
