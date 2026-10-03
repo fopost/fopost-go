@@ -3,6 +3,7 @@ package fopost
 import (
 	"context"
 	"net/url"
+	"strings"
 )
 
 // GoogleAdsService covers the Google Ads surface no other network has:
@@ -604,6 +605,103 @@ type UploadGoogleConversionAdjustmentsRequest struct {
 // It needs `publish`.
 func (s *GoogleAdsService) UploadConversionAdjustments(ctx context.Context, body *UploadGoogleConversionAdjustmentsRequest) (int, error) {
 	return s.uploaded(ctx, "/ads/google/conversions/adjustments", body)
+}
+
+// ─── Recommendations ───────────────────────────────────────────────
+
+// GoogleRecommendationImpact is what Google projects applying a
+// recommendation would change. A nil field is one it does not estimate.
+type GoogleRecommendationImpact struct {
+	BaseClicks           *float64 `json:"baseClicks"`
+	PotentialClicks      *float64 `json:"potentialClicks"`
+	BaseCostMinor        *int     `json:"baseCostMinor"`
+	PotentialCostMinor   *int     `json:"potentialCostMinor"`
+	BaseConversions      *float64 `json:"baseConversions"`
+	PotentialConversions *float64 `json:"potentialConversions"`
+}
+
+// GoogleRecommendation is one of Google's own recommendations for the account.
+// ID is the Google resource name rather than the `~` form other objects use,
+// because a recommendation is not an object you address again: it is what
+// ApplyRecommendations and DismissRecommendations take.
+type GoogleRecommendation struct {
+	ID         string                      `json:"id"`
+	Type       string                      `json:"type"`
+	CampaignID string                      `json:"campaignId"`
+	AdGroupID  string                      `json:"adGroupId"`
+	Dismissed  bool                        `json:"dismissed"`
+	Impact     *GoogleRecommendationImpact `json:"impact"`
+}
+
+// GoogleOptimizationScore is Google's estimate of how well the account is set
+// up, from 0 to 1, with the score of each live campaign beside it.
+type GoogleOptimizationScore struct {
+	Score *float64 `json:"score"`
+	// Weight is how much this account's score counts against others under the
+	// same manager.
+	Weight    *float64                          `json:"weight"`
+	Campaigns []GoogleOptimizationScoreCampaign `json:"campaigns"`
+}
+
+// GoogleOptimizationScoreCampaign is one campaign's score.
+type GoogleOptimizationScoreCampaign struct {
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Score *float64 `json:"score"`
+}
+
+// Recommendations lists what Google thinks the account should change next.
+// Passing types narrows to those recommendation types.
+func (s *GoogleAdsService) Recommendations(ctx context.Context, scope GoogleScope, types []string) ([]GoogleRecommendation, error) {
+	q := scope.query()
+	if len(types) > 0 {
+		q.Set("types", strings.Join(types, ","))
+	}
+	var out []GoogleRecommendation
+	if err := s.client.json(ctx, "GET", "/ads/google/recommendations", nil, q, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// OptimizationScore reads the account's score and each live campaign's.
+func (s *GoogleAdsService) OptimizationScore(ctx context.Context, scope GoogleScope) (*GoogleOptimizationScore, error) {
+	var out GoogleOptimizationScore
+	if err := s.client.json(ctx, "GET", "/ads/google/optimization-score", nil, scope.query(), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GoogleRecommendationsRequest is the body of ApplyRecommendations and
+// DismissRecommendations.
+type GoogleRecommendationsRequest struct {
+	GoogleScope
+	IDs []string `json:"ids"`
+}
+
+// ApplyRecommendations applies each one, which changes what the live account
+// serves or bids, and reports how many landed. It needs `publish`.
+func (s *GoogleAdsService) ApplyRecommendations(ctx context.Context, body *GoogleRecommendationsRequest) (int, error) {
+	var out struct {
+		Applied int `json:"applied"`
+	}
+	if err := s.client.json(ctx, "POST", "/ads/google/recommendations/apply", body, nil, &out); err != nil {
+		return 0, err
+	}
+	return out.Applied, nil
+}
+
+// DismissRecommendations hides each one so Google stops surfacing it. It needs
+// `publish`.
+func (s *GoogleAdsService) DismissRecommendations(ctx context.Context, body *GoogleRecommendationsRequest) (int, error) {
+	var out struct {
+		Dismissed int `json:"dismissed"`
+	}
+	if err := s.client.json(ctx, "POST", "/ads/google/recommendations/dismiss", body, nil, &out); err != nil {
+		return 0, err
+	}
+	return out.Dismissed, nil
 }
 
 // ─── GAQL ──────────────────────────────────────────────────────────
