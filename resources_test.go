@@ -1129,3 +1129,158 @@ func TestAccountsSlackWebhookConnectionConflict(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestAccountsDiscordRoutes(t *testing.T) {
+	var method, path, query, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/discord/channels"):
+			_, _ = io.WriteString(w, `{"data":[{"id":"c2","name":"launches","type":0,"parent_id":null,"nsfw":false,"can_post":true,"is_current":true}]}`)
+		case strings.HasSuffix(r.URL.Path, "/channels/current"):
+			_, _ = io.WriteString(w, `{"data":{"id":"c2","name":"launches","is_current":true}}`)
+		case strings.HasSuffix(r.URL.Path, "/discord/members"):
+			_, _ = io.WriteString(w, `{"data":[{"id":"u7","username":"ada","display_name":null,"nick":null,"avatar":null,"is_bot":false,"roles":["r1"],"joined_at":null}]}`)
+		case strings.HasSuffix(r.URL.Path, "/discord/dm"):
+			_, _ = io.WriteString(w, `{"data":{"id":"m1","channel_id":"dm1"}}`)
+		case strings.Contains(r.URL.Path, "/discord/roles/"):
+			_, _ = io.WriteString(w, `{"data":{"assigned":true}}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":{"id":"e1","name":"Launch stream","description":null,"channel_id":null,"location":"https://example.com/live","start_time":"2026-10-01T18:00:00.000Z","end_time":"2026-10-01T19:00:00.000Z","status":"scheduled","user_count":0}}`)
+		}
+	})
+	ctx := context.Background()
+
+	channels, err := client.Accounts.ListDiscordChannels(ctx, "acc_1")
+	if err != nil || method != "GET" || path != "/accounts/acc_1/discord/channels" || len(channels) != 1 || !channels[0].IsCurrent {
+		t.Fatalf("channels: %v %s %s %+v", err, method, path, channels)
+	}
+
+	if _, err := client.Accounts.SwitchDiscordChannel(ctx, "acc_1", "c2"); err != nil ||
+		method != "PATCH" || path != "/accounts/acc_1/discord/channels/current" || raw != `{"channel_id":"c2"}` {
+		t.Fatalf("switch: %v %s %s %s", err, method, path, raw)
+	}
+
+	event, err := client.Accounts.CreateDiscordEvent(ctx, "acc_1", &DiscordEventRequest{
+		Name:      "Launch stream",
+		StartTime: "2026-10-01T18:00:00.000Z",
+		EndTime:   "2026-10-01T19:00:00.000Z",
+		Location:  "https://example.com/live",
+	})
+	if err != nil || method != "POST" || path != "/accounts/acc_1/discord/events" || event.ID != "e1" ||
+		raw != `{"name":"Launch stream","start_time":"2026-10-01T18:00:00.000Z","end_time":"2026-10-01T19:00:00.000Z","location":"https://example.com/live"}` {
+		t.Fatalf("create event: %v %s %s %s", err, method, path, raw)
+	}
+
+	if _, err := client.Accounts.UpdateDiscordEvent(ctx, "acc_1", "e1", &DiscordEventRequest{Status: "canceled"}); err != nil ||
+		method != "PATCH" || path != "/accounts/acc_1/discord/events/e1" || raw != `{"status":"canceled"}` {
+		t.Fatalf("update event: %v %s %s %s", err, method, path, raw)
+	}
+
+	if err := client.Accounts.DeleteDiscordEvent(ctx, "acc_1", "e1"); err != nil ||
+		method != "DELETE" || path != "/accounts/acc_1/discord/events/e1" {
+		t.Fatalf("delete event: %v %s %s", err, method, path)
+	}
+
+	members, err := client.Accounts.ListDiscordMembers(ctx, "acc_1", &ListDiscordMembersOptions{Query: "ada", Limit: 25})
+	if err != nil || path != "/accounts/acc_1/discord/members" || query != "limit=25&q=ada" || len(members) != 1 || members[0].ID != "u7" {
+		t.Fatalf("members: %v %s %s %+v", err, path, query, members)
+	}
+
+	ref, err := client.Accounts.SendDiscordDM(ctx, "acc_1", "u7", "hi")
+	if err != nil || method != "POST" || path != "/accounts/acc_1/discord/dm" || ref.ChannelID != "dm1" ||
+		raw != `{"content":"hi","member_id":"u7"}` {
+		t.Fatalf("dm: %v %s %s %s", err, method, path, raw)
+	}
+
+	if err := client.Accounts.AddDiscordMemberRole(ctx, "acc_1", "r1", "u7"); err != nil ||
+		method != "PUT" || path != "/accounts/acc_1/discord/roles/r1/members/u7" {
+		t.Fatalf("assign: %v %s %s", err, method, path)
+	}
+}
+
+func TestAccountsDiscordWebhookConnectionConflict(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"error":"webhook_connection","message":"Upgrade it to the bot first"}`)
+	})
+
+	_, err := client.Accounts.ListDiscordChannels(context.Background(), "acc_1")
+	if !IsConflict(err) || CodeOf(err) != "webhook_connection" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestAccountsPlatformMetricsAsksForRawAndDecodesTheSet(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"platform":"facebook","account":{"fetched_at":"2026-09-20T02:00:00.000Z","metrics":[{"key":"page_daily_video_ad_break_earnings","label":"Ad Break Earnings","kind":"currency_usd","value":42.15},{"key":"page_impressions_paid","label":"Paid Impressions","kind":"count","value":1500}]},"post":{"external_post_id":"123_456","fetched_at":"2026-09-20T02:00:00.000Z","metrics":[]}}}`)
+	})
+
+	metrics, err := client.Accounts.PlatformMetrics(context.Background(), "acc_1")
+	if err != nil {
+		t.Fatalf("Accounts.PlatformMetrics: %v", err)
+	}
+	if path != "/accounts/acc_1/insights" {
+		t.Fatalf("path = %q", path)
+	}
+	if query != "raw=true" {
+		t.Fatalf("query = %q", query)
+	}
+	if metrics.Platform != "facebook" || len(metrics.Account.Metrics) != 2 {
+		t.Fatalf("metrics = %+v", metrics)
+	}
+	if metrics.Account.Metrics[0].Key != "page_daily_video_ad_break_earnings" {
+		t.Fatalf("first key = %q", metrics.Account.Metrics[0].Key)
+	}
+	if n, ok := metrics.Account.Metrics[0].Number(); !ok || n != 42.15 {
+		t.Fatalf("earnings = %v %v", n, ok)
+	}
+	if metrics.Post.ExternalPostID != "123_456" || len(metrics.Post.Metrics) != 0 {
+		t.Fatalf("post = %+v", metrics.Post)
+	}
+}
+
+func TestAccountsPlatformMetricsKeepsASeriesValueRaw(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"data":{"platform":"youtube","account":{"fetched_at":null,"metrics":[{"key":"daily_views","label":"Views by Day","kind":"series","value":[{"day":"2026-09-19","views":600}]}]},"post":{"external_post_id":null,"fetched_at":null,"metrics":[]}}}`)
+	})
+
+	metrics, err := client.Accounts.PlatformMetrics(context.Background(), "acc_1")
+	if err != nil {
+		t.Fatalf("Accounts.PlatformMetrics: %v", err)
+	}
+	row := metrics.Account.Metrics[0]
+	if _, ok := row.Number(); ok {
+		t.Fatal("a series must not decode as a number")
+	}
+	var points []struct {
+		Day   string `json:"day"`
+		Views int    `json:"views"`
+	}
+	if err := json.Unmarshal(row.Value, &points); err != nil {
+		t.Fatalf("unmarshal series: %v", err)
+	}
+	if len(points) != 1 || points[0].Views != 600 {
+		t.Fatalf("points = %+v", points)
+	}
+}
+
+func TestAccountsPlatformMetricsSurfacesAPendingGrant(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"error":"platform_metrics_unavailable","message":"google-business metrics are not available on this deployment yet."}`)
+	})
+
+	_, err := client.Accounts.PlatformMetrics(context.Background(), "acc_1")
+	apiErr, ok := APIError(err)
+	if !ok {
+		t.Fatalf("err = %v", err)
+	}
+	if apiErr.Status != http.StatusServiceUnavailable || apiErr.Code != "platform_metrics_unavailable" {
+		t.Fatalf("apiErr = %+v", apiErr)
+	}
+}
