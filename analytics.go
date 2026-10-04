@@ -345,3 +345,278 @@ func (s *AnalyticsService) Collect(ctx context.Context, accountID string) (*Coll
 	}
 	return out, nil
 }
+
+// ─── Deeper analytics ──────────────────────────────────────────────
+
+// DecayBand is one age band of the content decay report. Posts counts the
+// posts with at least one reading in the band; ShareOfFinal is nil when
+// nothing in it had earned anything yet.
+type DecayBand struct {
+	Bucket         string   `json:"bucket"`
+	Label          string   `json:"label"`
+	Posts          int      `json:"posts"`
+	AvgEngagements float64  `json:"avgEngagements"`
+	AvgImpressions float64  `json:"avgImpressions"`
+	ShareOfFinal   *float64 `json:"shareOfFinal"`
+}
+
+// ContentDecay is how engagement accumulates as a post ages. HalfLifeBucket
+// names the first band where the average post had passed half its final
+// engagement, and is empty when nothing was measured.
+type ContentDecay struct {
+	Days           int         `json:"days"`
+	PostsMeasured  int         `json:"postsMeasured"`
+	HalfLifeBucket string      `json:"halfLifeBucket"`
+	Bands          []DecayBand `json:"bands"`
+}
+
+// Decay reports how long a post keeps earning. Days selects posts by publish
+// time, not reading time.
+func (s *AnalyticsService) Decay(ctx context.Context, params *AnalyticsParams) (*ContentDecay, error) {
+	out := &ContentDecay{}
+	if err := s.client.json(ctx, "GET", "/analytics/decay", nil, params.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FrequencyWeek is one week of posting. WeekStart is the Monday, UTC, as
+// YYYY-MM-DD.
+type FrequencyWeek struct {
+	WeekStart             string  `json:"weekStart"`
+	Posts                 int     `json:"posts"`
+	Engagements           int     `json:"engagements"`
+	AvgEngagementsPerPost float64 `json:"avgEngagementsPerPost"`
+}
+
+// FrequencyBand groups the weeks that shared a cadence. EngagementRate is
+// engagements over reach, impressions as the stand-in, and nil with neither.
+type FrequencyBand struct {
+	Band                  string   `json:"band"`
+	Label                 string   `json:"label"`
+	Weeks                 int      `json:"weeks"`
+	Posts                 int      `json:"posts"`
+	AvgPostsPerWeek       float64  `json:"avgPostsPerWeek"`
+	AvgEngagementsPerPost float64  `json:"avgEngagementsPerPost"`
+	EngagementRate        *float64 `json:"engagementRate"`
+}
+
+// PostingFrequency sets weekly cadence against what each cadence earned per
+// post. Best is nil when nothing was posted in the window.
+type PostingFrequency struct {
+	Days  int             `json:"days"`
+	Weeks []FrequencyWeek `json:"weeks"`
+	Bands []FrequencyBand `json:"bands"`
+	Best  *FrequencyBand  `json:"best"`
+}
+
+// Frequency reports whether posting more earned more.
+func (s *AnalyticsService) Frequency(ctx context.Context, params *AnalyticsParams) (*PostingFrequency, error) {
+	out := &PostingFrequency{}
+	if err := s.client.json(ctx, "GET", "/analytics/frequency", nil, params.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TimelineDelta is what moved between one reading and the one before it.
+type TimelineDelta struct {
+	Impressions int `json:"impressions"`
+	Reach       int `json:"reach"`
+	Engagements int `json:"engagements"`
+	Likes       int `json:"likes"`
+	Comments    int `json:"comments"`
+	Shares      int `json:"shares"`
+}
+
+// TimelinePoint is one reading of a post. AgeMinutes is nil when the network
+// never said when the post went out.
+type TimelinePoint struct {
+	At          Time          `json:"at"`
+	AgeMinutes  *int          `json:"ageMinutes"`
+	Impressions *int          `json:"impressions"`
+	Reach       *int          `json:"reach"`
+	Engagements *int          `json:"engagements"`
+	Likes       *int          `json:"likes"`
+	Comments    *int          `json:"comments"`
+	Shares      *int          `json:"shares"`
+	VideoViews  *int          `json:"videoViews"`
+	Delta       TimelineDelta `json:"delta"`
+}
+
+// TimelineDelivery is one delivery's readings: the same post on two networks
+// decays differently.
+type TimelineDelivery struct {
+	AccountID      string          `json:"accountId"`
+	Platform       string          `json:"platform"`
+	Username       string          `json:"username"`
+	ExternalPostID string          `json:"externalPostId"`
+	PostedAt       Time            `json:"postedAt"`
+	Points         []TimelinePoint `json:"points"`
+}
+
+// PostTimeline is every reading held for one post. PostID is empty when the
+// post was made natively on the network.
+type PostTimeline struct {
+	PostID     string             `json:"postId"`
+	Deliveries []TimelineDelivery `json:"deliveries"`
+}
+
+// Timeline returns every reading held for one post, oldest first, with what
+// moved between them. idOrPermalink is a FoPost post id or the permalink of a
+// post made natively on the network.
+func (s *AnalyticsService) Timeline(ctx context.Context, idOrPermalink string) (*PostTimeline, error) {
+	out := &PostTimeline{}
+	path := "/analytics/posts/" + url.PathEscape(idOrPermalink) + "/timeline"
+	if err := s.client.json(ctx, "GET", path, nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MetricChange is one reading, as the changes feed reports it. PostID is empty
+// for a post made natively on the network.
+type MetricChange struct {
+	AccountID      string `json:"accountId"`
+	Platform       string `json:"platform"`
+	ExternalPostID string `json:"externalPostId"`
+	PostID         string `json:"postId"`
+	PostedAt       Time   `json:"postedAt"`
+	FetchedAt      Time   `json:"fetchedAt"`
+	Impressions    *int   `json:"impressions"`
+	Reach          *int   `json:"reach"`
+	Engagements    *int   `json:"engagements"`
+	Likes          *int   `json:"likes"`
+	Comments       *int   `json:"comments"`
+	Shares         *int   `json:"shares"`
+}
+
+// MetricChangePage is one page of readings. Feed Cursor back as Since to
+// continue; it is zero when nothing changed.
+type MetricChangePage struct {
+	Since   Time           `json:"since"`
+	Cursor  Time           `json:"cursor"`
+	HasMore bool           `json:"hasMore"`
+	Changes []MetricChange `json:"changes"`
+}
+
+// MetricChangesParams scopes the changes feed. Since is an RFC 3339 timestamp;
+// empty asks for the last seven days.
+type MetricChangesParams struct {
+	Since       string
+	Limit       int
+	AccountID   string
+	WorkspaceID string
+}
+
+func (p *MetricChangesParams) values() url.Values {
+	q := newQuery()
+	if p == nil {
+		return q.values()
+	}
+	q.str("since", p.Since)
+	q.num("limit", p.Limit)
+	q.str("accountId", p.AccountID)
+	q.str("workspace_id", p.WorkspaceID)
+	return q.values()
+}
+
+// Changes returns readings recorded after Since, oldest first, with a cursor
+// to continue. Poll it to mirror the metrics into your own store instead of
+// refetching the whole history.
+func (s *AnalyticsService) Changes(ctx context.Context, params *MetricChangesParams) (*MetricChangePage, error) {
+	out := &MetricChangePage{}
+	if err := s.client.json(ctx, "GET", "/analytics/changes", nil, params.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CollectPostDelivery is what the on-demand refresh did for one delivery.
+// Message says why a refresh did not happen.
+type CollectPostDelivery struct {
+	AccountID      string `json:"accountId"`
+	Platform       string `json:"platform"`
+	ExternalPostID string `json:"externalPostId"`
+	Collected      bool   `json:"collected"`
+	FetchedAt      Time   `json:"fetchedAt"`
+	Message        string `json:"message"`
+}
+
+// CollectPostResult reports what one post's refresh managed.
+type CollectPostResult struct {
+	Collected  int                   `json:"collected"`
+	Deliveries []CollectPostDelivery `json:"deliveries"`
+}
+
+// CollectPost re-reads one post from the network now. It spends the same
+// per-user budget as Collect, so a burst answers 429. idOrPermalink is a
+// FoPost post id or the permalink of a post made natively on the network.
+func (s *AnalyticsService) CollectPost(ctx context.Context, idOrPermalink string) (*CollectPostResult, error) {
+	out := &CollectPostResult{}
+	path := "/posts/" + url.PathEscape(idOrPermalink) + "/analytics/collect"
+	if err := s.client.json(ctx, "POST", path, nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// NativePostMetrics is the freshest reading held for a post made outside
+// FoPost.
+type NativePostMetrics struct {
+	Impressions *int `json:"impressions"`
+	Reach       *int `json:"reach"`
+	Engagements *int `json:"engagements"`
+	Likes       *int `json:"likes"`
+	Comments    *int `json:"comments"`
+	Shares      *int `json:"shares"`
+	VideoViews  *int `json:"videoViews"`
+}
+
+// NativePost is a post on the account that never went out through FoPost.
+type NativePost struct {
+	ExternalPostID string            `json:"externalPostId"`
+	Text           string            `json:"text"`
+	Permalink      string            `json:"permalink"`
+	ThumbnailURL   string            `json:"thumbnailUrl"`
+	MediaType      string            `json:"mediaType"`
+	PostedAt       Time              `json:"postedAt"`
+	FetchedAt      Time              `json:"fetchedAt"`
+	Metrics        NativePostMetrics `json:"metrics"`
+}
+
+// NativePostList is one page of posts made outside FoPost.
+type NativePostList struct {
+	Data []NativePost  `json:"data"`
+	Meta InboxPageMeta `json:"meta"`
+}
+
+// NativePostsParams paginates the native-posts listing. Days keeps only posts
+// published in the last that many days.
+type NativePostsParams struct {
+	Page    int
+	PerPage int
+	Days    int
+}
+
+func (p *NativePostsParams) values() url.Values {
+	q := newQuery()
+	if p == nil {
+		return q.values()
+	}
+	q.num("page", p.Page)
+	q.num("per_page", p.PerPage)
+	q.num("days", p.Days)
+	return q.values()
+}
+
+// NativePosts lists the posts on an account that never went out through
+// FoPost, newest first.
+func (s *AnalyticsService) NativePosts(ctx context.Context, accountID string, params *NativePostsParams) (*NativePostList, error) {
+	out := &NativePostList{}
+	path := "/accounts/" + url.PathEscape(accountID) + "/native-posts"
+	if err := s.client.Do(ctx, "GET", path, nil, params.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
