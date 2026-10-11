@@ -319,6 +319,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `GoogleBusiness` | `GetLocation`, `UpdateLocation`, `GetAttributes`, `UpdateAttributes`, `GetMenus`, `ReplaceMenus`, `GetServices`, `ReplaceServices`, `ListMedia`, `AddMedia`, `DeleteMedia`, `ListPlaceActions`, `CreatePlaceAction`, `UpdatePlaceAction`, `DeletePlaceAction`, `GetVerificationOptions`, `StartVerification`, `CompleteVerification`, `GetPerformance`, `GetSearchKeywords`, `Assign` |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 | `Activity`    | `List`                                                                                                                                                            |
+| `Blog`        | `GetSettings`, `UpdateSettings`, `RotateWebsiteSecret`, `TestWebsite`, `ListKeywords`, `PlanKeywords`, `AddKeyword`, `UpdateKeyword`, `DeleteKeyword`, `ListArticles`, `RequestArticle`, `GetArticle`, `UpdateArticle`, `RegenerateArticle`, `PublishArticle`, `RejectArticle`, `DeleteArticle` |
 
 `Activity.List` reads what happened in a workspace, newest first.
 `ActivityKindSecurity` is the audit log: members joining, leaving or changing
@@ -389,12 +390,53 @@ _, err = client.Sequences.Enroll(ctx, sequence.ID, &fopost.EnrollRequest{
 _, err = client.Sequences.Unenroll(ctx, sequence.ID, []string{contactID})
 ```
 
+## Blog
+
+`Blog` plans keywords, writes articles and publishes them to a website. A post
+goes to a social network; an article goes to a website. Reads and settings need
+`posts`; `PlanKeywords`, `RequestArticle` and `RegenerateArticle` spend credits
+and need `ai` (an empty balance is a `402`, see `UpgradeURL`); `PublishArticle`
+needs `publish` and answers `409` `no_target` until the settings name a target.
+
+```go
+article, err := client.Blog.RequestArticle(ctx, workspaceID, &fopost.RequestBlogArticleRequest{
+    Keyword:      "trail running shoes",
+    Instructions: "Compare three models and close with a buying checklist",
+})
+// article.Status is "queued"; poll client.Blog.GetArticle until it is "draft".
+```
+
+With `TargetKind` set to `fopost.BlogTargetWebsite` and a `WebsiteURL`, every
+published article is POSTed to that URL as a signed `article.published`
+delivery. `UpdateSettings` returns the signing secret once, when the URL is
+first set. `VerifyWebhook` checks the signature over the raw bytes, in constant
+time, and refuses a timestamp more than five minutes off:
+
+```go
+func handle(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+    envelope, err := fopost.VerifyWebhook(body, r.Header, os.Getenv("FOPOST_WEBHOOK_SECRET"))
+    if err != nil {
+        http.Error(w, "invalid signature", http.StatusUnauthorized)
+        return
+    }
+    if envelope.Event == fopost.EventArticlePublished {
+        var article fopost.BlogArticlePublished
+        _ = envelope.Decode(&article)
+        // article.BodyHTML, article.Images (URLs valid for six hours; store your own copy)
+    }
+    w.WriteHeader(http.StatusOK)
+}
+```
+
+The same helper verifies every FoPost webhook, not only the blog ones.
+
 ## Scopes and limits
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
 `workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`
-(which also covers `Knowledge`), `ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
+(which also covers `Knowledge`), `ads`, `ai`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
 and the create, update, delete and duplicate calls on campaigns, ad sets and
 network ads spend money and need `publish` as well as `ads`; a boost, ad or new
 campaign object starts paused unless `Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
