@@ -235,7 +235,7 @@ func TestMediaUploadDirectPresignsPutsAndCompletes(t *testing.T) {
 		}
 	})
 
-	item, err := client.Media.UploadDirect(context.Background(), "ws_1", "a.png", "image/png", []byte("png-a"))
+	item, err := client.Media.UploadDirect(context.Background(), &PresignInput{WorkspaceID: "ws_1", Filename: "a.png", MimeType: "image/png", Size: 5}, strings.NewReader("png-a"))
 	if err != nil {
 		t.Fatalf("Media.UploadDirect: %v", err)
 	}
@@ -268,12 +268,44 @@ func TestMediaUploadDirectReturnsAPIErrorOnRejectedPut(t *testing.T) {
 		}
 	})
 
-	_, err := client.Media.UploadDirect(context.Background(), "ws_1", "a.png", "image/png", []byte("png-a"))
+	_, err := client.Media.UploadDirect(context.Background(), &PresignInput{WorkspaceID: "ws_1", Filename: "a.png", MimeType: "image/png", Size: 5}, strings.NewReader("png-a"))
 	if !IsForbidden(err) {
 		t.Fatalf("err = %v, want a 403 *Error", err)
 	}
 	if completed {
 		t.Fatal("complete must not be called after a rejected PUT")
+	}
+}
+
+func TestMediaLimitsSendsWorkspaceAndDecodes(t *testing.T) {
+	var query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/media/limits" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		query = r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"maxFileBytes":5368709120,"source":"add_on","connectedAccounts":3,"largeUploadsEnabled":true,"nextTier":null,"multipartMaxFileBytes":104857600,"maxFilesPerUpload":5,"directUploadAvailable":true,"allowedTypes":["image/png","video/mp4"]}}`)
+	})
+
+	limits, err := client.Media.Limits(context.Background(), "ws_1")
+	if err != nil {
+		t.Fatalf("Media.Limits: %v", err)
+	}
+	if query != "workspaceId=ws_1" {
+		t.Fatalf("query = %q", query)
+	}
+	if limits.MaxFileBytes != 5<<30 || limits.Source != "add_on" || limits.NextTier != nil || limits.MultipartMaxFileBytes != 100<<20 {
+		t.Fatalf("limits = %+v", limits)
+	}
+	if len(limits.AllowedTypes) != 2 || !limits.DirectUploadAvailable {
+		t.Fatalf("limits = %+v", limits)
+	}
+
+	if _, err := client.Media.Limits(context.Background(), ""); err != nil {
+		t.Fatalf("Media.Limits without a workspace: %v", err)
+	}
+	if query != "" {
+		t.Fatalf("query = %q, want the workspace omitted", query)
 	}
 }
 

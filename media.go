@@ -1,13 +1,16 @@
 package fopost
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 )
+
+// DefaultMultipartMaxFileBytes is the per-file ceiling of a multipart request
+// when Limits cannot be read. Larger files go through UploadDirect.
+const DefaultMultipartMaxFileBytes int64 = 100 << 20
 
 // MediaService covers the media library. Uploads count against the plan's
 // storage allowance and are reachable with the posts scope.
@@ -57,6 +60,40 @@ func (s *MediaService) List(ctx context.Context, workspaceID string) ([]MediaLib
 	return out, nil
 }
 
+// UploadLimitTier is the next account tier and the ceiling it unlocks.
+type UploadLimitTier struct {
+	// UpToAccounts is nil on the open-ended top tier.
+	UpToAccounts *int  `json:"upToAccounts"`
+	MaxFileBytes int64 `json:"maxFileBytes"`
+}
+
+// UploadLimits is what the account may upload, as reported by Limits.
+type UploadLimits struct {
+	// MaxFileBytes is the largest file any route accepts.
+	MaxFileBytes int64 `json:"maxFileBytes"`
+	// Source is "accounts", "add_on", or "bypass".
+	Source                string           `json:"source"`
+	ConnectedAccounts     int              `json:"connectedAccounts"`
+	LargeUploadsEnabled   bool             `json:"largeUploadsEnabled"`
+	NextTier              *UploadLimitTier `json:"nextTier"`
+	MultipartMaxFileBytes int64            `json:"multipartMaxFileBytes"`
+	MaxFilesPerUpload     int              `json:"maxFilesPerUpload"`
+	DirectUploadAvailable bool             `json:"directUploadAvailable"`
+	AllowedTypes          []string         `json:"allowedTypes"`
+}
+
+// Limits reports the upload ceilings for the key's account. workspaceID may
+// be empty.
+func (s *MediaService) Limits(ctx context.Context, workspaceID string) (*UploadLimits, error) {
+	q := newQuery()
+	q.str("workspaceId", workspaceID)
+	var out UploadLimits
+	if err := s.client.json(ctx, "GET", "/media/limits", nil, q.values(), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // File is one upload: a name and the bytes behind it.
 type File struct {
 	Name    string
@@ -95,13 +132,29 @@ func (s *MediaService) Upload(ctx context.Context, workspaceID string, files ...
 	return out, nil
 }
 
+// PersonConsent attests that the person in a BrandRole "person" asset agreed
+// to its use.
+type PersonConsent struct {
+	Subject   string `json:"subject"`
+	Statement string `json:"statement"`
+}
+
 // PresignInput describes the file a direct upload will carry.
 type PresignInput struct {
 	WorkspaceID string `json:"workspaceId"`
 	Filename    string `json:"filename"`
 	MimeType    string `json:"mimeType"`
-	// Size is the exact byte length of the upload, at most 50 MB.
-	Size int64 `json:"size"`
+	// Size is the exact byte length of the upload, up to the account's
+	// MaxFileBytes (see Limits).
+	Size     int64  `json:"size"`
+	FolderID string `json:"folderId,omitempty"`
+	// Origin is "chat" when the asset belongs to an agent conversation.
+	Origin string `json:"origin,omitempty"`
+	// BrandRole is "logo", "product", "person", or "background".
+	BrandRole    string `json:"brandRole,omitempty"`
+	BrandVoiceID string `json:"brandVoiceId,omitempty"`
+	// PersonConsent is required when BrandRole is "person".
+	PersonConsent *PersonConsent `json:"personConsent,omitempty"`
 }
 
 // PresignedUpload is a one-time upload slot. PUT the raw bytes to UploadURL
@@ -113,6 +166,8 @@ type PresignedUpload struct {
 	Method    string            `json:"method"`
 	Headers   map[string]string `json:"headers"`
 	ExpiresAt Time              `json:"expiresAt"`
+	// MaxFileBytes is the account's ceiling at the time of the presign.
+	MaxFileBytes int64 `json:"maxFileBytes"`
 }
 
 // Presign reserves a direct-upload slot for one file.
@@ -140,15 +195,21 @@ func (s *MediaService) Complete(ctx context.Context, uploadID string) (*Uploaded
 	return &out, nil
 }
 
-// UploadDirect presigns, sends the bytes to the upload URL, and completes the
-// upload in one call. The PUT carries no API key.
-func (s *MediaService) UploadDirect(ctx context.Context, workspaceID, filename, mimeType string, data []byte) (*UploadedMedia, error) {
-	presigned, err := s.Presign(ctx, &PresignInput{
-		WorkspaceID: workspaceID,
-		Filename:    filename,
-		MimeType:    mimeType,
-		Size:        int64(len(data)),
-	})
+// UploadDirect presigns, streams content to the upload URL, and completes the
+// upload in one call. input.Size must be the exact byte length of content;
+// nothing is buffered, so a multi-gigabyte file is fine. The PUT carries no
+// API key.
+func (s *MediaService) UploadDirect(ctx context.Context, input *PresignInput, content io.Reader) (*UploadedMedia, error) {
+	if input == nil {
+		return nil, fmt.Errorf("fopost: presign input is required")
+	}
+	if content == nil {
+		return nil, fmt.Errorf("fopost: file %q has no content", input.Filename)
+	}
+	if input.Size <= 0 {
+		return nil, fmt.Errorf("fopost: file %q needs its byte size", input.Filename)
+	}
+	presigned, err := s.Presign(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -157,15 +218,18 @@ func (s *MediaService) UploadDirect(ctx context.Context, workspaceID, filename, 
 	if method == "" {
 		method = http.MethodPut
 	}
-	req, err := http.NewRequestWithContext(ctx, method, presigned.UploadURL, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, method, presigned.UploadURL, content)
 	if err != nil {
 		return nil, fmt.Errorf("fopost: building upload request: %w", err)
 	}
-	req.ContentLength = int64(len(data))
+	req.ContentLength = input.Size
 	for name, value := range presigned.Headers {
 		req.Header.Set(name, value)
 	}
-	res, err := s.client.httpClient.Do(req)
+	// The client timeout is sized for API calls, not a multi-gigabyte PUT; ctx still bounds it.
+	putClient := *s.client.httpClient
+	putClient.Timeout = 0
+	res, err := putClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fopost: PUT %s: %w", presigned.UploadURL, err)
 	}
