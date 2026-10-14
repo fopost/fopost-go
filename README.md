@@ -108,20 +108,60 @@ content := []fopost.ContentBlock{{
 }}
 ```
 
-Larger files can go straight to storage instead of through the API. `UploadDirect`
-presigns a slot, PUTs the bytes to it with no API key, and completes the upload:
+Files can also ride along with the post itself. `Posts.Create` and `Posts.Update`
+take `PostFile`s after the body; they land in the workspace library and attach
+to the first content block. Small files travel in the same request as the post;
+anything over the multipart ceiling is sent straight to storage first and
+attached by URL. The caller never sees the split.
 
 ```go
-data, _ := os.ReadFile("clip.mp4")
+clip, err := fopost.OpenPostFile("clip.mp4")
+if err != nil {
+	log.Fatal(err)
+}
+defer clip.Close()
 
-uploaded, err := client.Media.UploadDirect(ctx, workspace.ID, "clip.mp4", "video/mp4", data)
+post, err := client.Posts.Create(ctx, &fopost.CreatePostRequest{
+	WorkspaceID: workspace.ID,
+	Accounts:    []string{account.ID},
+	Content:     fopost.Text("Watch this"),
+}, *clip)
+```
+
+A post takes up to `fopost.MaxPostFiles` files. `Media.Limits` reports what the
+account may upload: `MaxFileBytes` is the largest file any route accepts and
+grows with the number of connected accounts (or the Large Uploads add-on), and
+`MultipartMaxFileBytes` is what one multipart request carries per file.
+
+```go
+limits, err := client.Media.Limits(ctx, workspace.ID) // "" for the key's default
+fmt.Println(limits.MaxFileBytes, limits.MultipartMaxFileBytes, limits.NextTier)
+```
+
+Larger files can go straight to storage instead of through the API. `UploadDirect`
+presigns a slot, streams the bytes to it with no API key, and completes the upload.
+It reads from an `io.Reader` with a declared size, so nothing is held in memory:
+
+```go
+file, _ := os.Open("clip.mp4")
+defer file.Close()
+info, _ := file.Stat()
+
+uploaded, err := client.Media.UploadDirect(ctx, &fopost.PresignInput{
+	WorkspaceID: workspace.ID,
+	Filename:    "clip.mp4",
+	MimeType:    "video/mp4",
+	Size:        info.Size(),
+}, file)
 if err != nil {
 	log.Fatal(err)
 }
 ```
 
 `Presign` and `Complete` are the two halves when you want to send the bytes
-yourself.
+yourself. A file over the account's ceiling is a `413` with code `file_too_large`;
+`fopost.IsPayloadTooLarge(err)` spots it and `(*Error).MaxFileBytes()` reads the
+ceiling it reports.
 
 ## Scheduling and publishing
 
@@ -289,6 +329,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | 403    | `IsForbidden`        | valid key, but no scope or workspace access     |
 | 404    | `IsNotFound`         | no such resource, or outside the key's reach    |
 | 409    | `IsConflict`         | the resource's state forbids the change         |
+| 413    | `IsPayloadTooLarge`  | a file over the account's ceiling               |
 | 429    | `IsRateLimited`      | over the plan's per-minute ceiling              |
 
 `StatusOf` and `CodeOf` read the same fields off any error, and
@@ -307,7 +348,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Webhooks`    | `List`, `Create`, `Update`, `Delete`, `Test`                                                                                                                      |
 | `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`, `Decay`, `Frequency`, `Timeline`, `Changes`, `CollectPost`, `NativePosts` |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
-| `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
+| `Media`       | `List`, `Limits`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                               |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `Handover`, `ListApprovals`, `ApproveReply`, `RejectReply` |
 | `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
 | `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |

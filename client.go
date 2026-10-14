@@ -186,6 +186,10 @@ type request struct {
 	query       url.Values
 	body        []byte
 	contentType string
+	// stream, when set, is sent instead of body; it cannot be replayed, so
+	// the call is never retried.
+	stream       io.Reader
+	streamLength int64
 	// unwrap peels a {"data": ...} envelope off the response before decoding.
 	unwrap bool
 }
@@ -228,9 +232,16 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 	}
 
 	for attempt := 1; ; attempt++ {
-		httpReq, err := http.NewRequestWithContext(ctx, req.method, endpoint, bodyReader(req.body))
+		var body io.Reader = bodyReader(req.body)
+		if req.stream != nil {
+			body = req.stream
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, req.method, endpoint, body)
 		if err != nil {
 			return fmt.Errorf("fopost: building request: %w", err)
+		}
+		if req.stream != nil {
+			httpReq.ContentLength = req.streamLength
 		}
 		httpReq.Header.Set("Accept", "application/json")
 		httpReq.Header.Set("X-API-Key", c.apiKey)
@@ -246,7 +257,7 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 				return err
 			}
 			wrapped := fmt.Errorf("fopost: %s %s: %w", req.method, req.path, err)
-			if attempt >= c.maxRetries {
+			if attempt >= c.maxRetries || req.stream != nil {
 				return wrapped
 			}
 			if err := sleep(ctx, backoff(attempt)); err != nil {
@@ -261,7 +272,7 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 		}
 
 		apiErr, isAPIErr := APIError(err)
-		if !isAPIErr || attempt >= c.maxRetries || !retryable(apiErr.Status) {
+		if !isAPIErr || attempt >= c.maxRetries || !retryable(apiErr.Status) || req.stream != nil {
 			return err
 		}
 		wait := backoff(attempt)

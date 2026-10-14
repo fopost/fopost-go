@@ -48,7 +48,7 @@ One flat package `fopost` at the repository root, one file per API group:
 | `client.go` | `Client`, `Option`s, the retry loop, decode, envelope unwrap, rate-limit and `Retry-After` parsing |
 | `errors.go` | `*Error`, `RateLimit`, `APIError`/`StatusOf`/`CodeOf`, `Is*` predicates |
 | `types.go` | `Time`, `PageMeta`, `ContentBlock`, `Text`/`Thread`, `queryBuilder`, `Bool`/`String`/`Int` |
-| `multipart.go` | `buildMultipart` — media upload and CSV bulk import bodies |
+| `multipart.go` | `buildMultipart` — buffered media upload and CSV bulk import bodies; `streamMultipart` — the piped form a post with files sends |
 | `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `contacts.go` `broadcasts.go` `ads.go` `validate.go` | one `*Service` each, with its request/response types |
 | `internal/version/main.go` | prints `fopost.Version` so the release workflow can check it against the tag |
 
