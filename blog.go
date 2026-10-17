@@ -10,10 +10,11 @@ import (
 // BlogService plans keywords, writes articles and publishes them to a
 // website. A post goes to a social network; an article goes to a website.
 //
-// Reads, settings and keyword edits need the `posts` scope. PlanKeywords,
-// RequestArticle and RegenerateArticle spend credits and need `ai`; an empty
-// balance answers 402 (IsPaymentRequired, UpgradeURL). PublishArticle needs
-// `publish` and answers 409 `no_target` until the settings name a target.
+// Reads, settings, keyword edits and SubmitArticle need the `posts` scope.
+// SuggestSeeds, PlanKeywords, RequestArticle and RegenerateArticle spend
+// credits and need `ai`; an empty balance answers 402 (IsPaymentRequired,
+// UpgradeURL). PublishArticle needs `publish` and answers 409 `no_target`
+// until the settings name a target.
 type BlogService struct{ client *Client }
 
 // Article statuses.
@@ -21,6 +22,7 @@ const (
 	BlogArticleStatusQueued     = "queued"
 	BlogArticleStatusWriting    = "writing"
 	BlogArticleStatusDraft      = "draft"
+	BlogArticleStatusInReview   = "in_review"
 	BlogArticleStatusScheduled  = "scheduled"
 	BlogArticleStatusPublishing = "publishing"
 	BlogArticleStatusPublished  = "published"
@@ -36,6 +38,15 @@ const (
 	BlogKeywordStatusDismissed = "dismissed"
 )
 
+// What the blog is for.
+const (
+	BlogGoalTraffic   = "traffic"
+	BlogGoalLeads     = "leads"
+	BlogGoalSales     = "sales"
+	BlogGoalSignups   = "signups"
+	BlogGoalAuthority = "authority"
+)
+
 // Where articles publish.
 const (
 	BlogTargetProductBlog = "product_blog"
@@ -45,14 +56,19 @@ const (
 
 // BlogSettings is a workspace's blog configuration.
 type BlogSettings struct {
-	SiteURL        *string `json:"siteUrl"`
-	Topic          *string `json:"topic"`
-	Audience       *string `json:"audience"`
+	SiteURL  *string `json:"siteUrl"`
+	Topic    *string `json:"topic"`
+	Audience *string `json:"audience"`
+	// Goal is one of the BlogGoal constants, or nil when unset.
+	Goal           *string `json:"goal"`
+	FocusTopics    *string `json:"focusTopics"`
+	AvoidTopics    *string `json:"avoidTopics"`
 	Language       string  `json:"language"`
 	LocationCode   int     `json:"locationCode"`
 	CadencePerWeek int     `json:"cadencePerWeek"`
+	// ReviewHoldDays is how many days before its planned date a picked
+	// keyword starts being written.
 	ReviewHoldDays int     `json:"reviewHoldDays"`
-	AutoPublish    bool    `json:"autoPublish"`
 	ImageTier      string  `json:"imageTier"`
 	InBodyImages   int     `json:"inBodyImages"`
 	MinWords       int     `json:"minWords"`
@@ -65,10 +81,22 @@ type BlogSettings struct {
 	// WebsiteURL receives published articles as a signed webhook.
 	WebsiteURL       *string `json:"websiteUrl"`
 	HasWebsiteSecret bool    `json:"hasWebsiteSecret"`
+	// PlanRun is the last keyword research run, nil before the first.
+	PlanRun *BlogPlanRun `json:"planRun"`
 	// KeywordDataAvailable reports whether search volume and difficulty can
 	// be fetched on this deployment.
 	KeywordDataAvailable bool `json:"keywordDataAvailable"`
 	UpdatedAt            Time `json:"updatedAt"`
+}
+
+// BlogPlanRun is the state of a keyword research run.
+type BlogPlanRun struct {
+	// Status is queued, running, done or failed.
+	Status string  `json:"status"`
+	Error  *string `json:"error"`
+	// Added is how many new keywords the run found.
+	Added      *int  `json:"added"`
+	FinishedAt *Time `json:"finishedAt"`
 }
 
 // UpdateBlogSettingsRequest is the body of UpdateSettings. Only the fields
@@ -77,11 +105,13 @@ type UpdateBlogSettingsRequest struct {
 	SiteURL         *string `json:"siteUrl,omitempty"`
 	Topic           *string `json:"topic,omitempty"`
 	Audience        *string `json:"audience,omitempty"`
+	Goal            *string `json:"goal,omitempty"`
+	FocusTopics     *string `json:"focusTopics,omitempty"`
+	AvoidTopics     *string `json:"avoidTopics,omitempty"`
 	Language        string  `json:"language,omitempty"`
 	LocationCode    *int    `json:"locationCode,omitempty"`
 	CadencePerWeek  *int    `json:"cadencePerWeek,omitempty"`
 	ReviewHoldDays  *int    `json:"reviewHoldDays,omitempty"`
-	AutoPublish     *bool   `json:"autoPublish,omitempty"`
 	ImageTier       string  `json:"imageTier,omitempty"`
 	InBodyImages    *int    `json:"inBodyImages,omitempty"`
 	MinWords        *int    `json:"minWords,omitempty"`
@@ -121,7 +151,9 @@ type BlogKeyword struct {
 	Status       string   `json:"status"`
 	// PlannedFor is a YYYY-MM-DD date.
 	PlannedFor *string `json:"plannedFor"`
-	CreatedAt  Time    `json:"createdAt"`
+	// FitReason says why the keyword serves the blog goal.
+	FitReason *string `json:"fitReason"`
+	CreatedAt Time    `json:"createdAt"`
 }
 
 // BlogArticleImage is an image on an article. Position is the index of the
@@ -182,8 +214,17 @@ type AddBlogKeywordRequest struct {
 	PlannedFor string `json:"plannedFor,omitempty"`
 }
 
+// SuggestBlogSeedsRequest is the body of SuggestSeeds.
+type SuggestBlogSeedsRequest struct {
+	// Seeds are the current terms to refine, at most 20.
+	Seeds []string `json:"seeds,omitempty"`
+	// Prompt steers the suggestions, at most 500 characters.
+	Prompt string `json:"prompt,omitempty"`
+}
+
 // UpdateBlogKeywordRequest is the body of UpdateKeyword. Only the fields you
-// set are sent.
+// set are sent. Setting Status to planned picks the keyword; it takes the
+// next free date unless PlannedFor is set.
 type UpdateBlogKeywordRequest struct {
 	Status     string  `json:"status,omitempty"`
 	PlannedFor *string `json:"plannedFor,omitempty"`
@@ -216,7 +257,8 @@ type UpdateBlogArticleRequest struct {
 	MetaDescription *string  `json:"metaDescription,omitempty"`
 	BodyMarkdown    string   `json:"bodyMarkdown,omitempty"`
 	Tags            []string `json:"tags,omitempty"`
-	// PublishAt puts the draft on the calendar.
+	// PublishAt puts the article on the calendar. It must be in review
+	// (or already scheduled or failed); a draft answers 409.
 	PublishAt *Time `json:"publishAt,omitempty"`
 }
 
@@ -299,8 +341,28 @@ func (s *BlogService) ListKeywords(ctx context.Context, workspaceID string, para
 	return out, nil
 }
 
+// SuggestSeeds suggests about ten search terms from the blog goal and topics.
+// Pass the current seeds to refine them and a prompt to steer.
+func (s *BlogService) SuggestSeeds(ctx context.Context, workspaceID string, req *SuggestBlogSeedsRequest) ([]string, error) {
+	if req == nil {
+		req = &SuggestBlogSeedsRequest{}
+	}
+	body := struct {
+		blogWorkspaceBody
+		*SuggestBlogSeedsRequest
+	}{blogWorkspaceBody{workspaceID}, req}
+	var out struct {
+		Seeds []string `json:"seeds"`
+	}
+	if err := s.client.json(ctx, "POST", "/blog/keywords/suggest", body, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Seeds, nil
+}
+
 // PlanKeywords queues keyword research. Nil seeds plans from the settings'
-// topic alone.
+// topic alone. It does not fill the calendar: results land as suggested
+// keywords, and UpdateKeyword with status planned picks one.
 func (s *BlogService) PlanKeywords(ctx context.Context, workspaceID string, seeds []string) error {
 	body := struct {
 		blogWorkspaceBody
@@ -398,12 +460,20 @@ func (s *BlogService) RegenerateArticle(ctx context.Context, workspaceID, id str
 	return s.articleAction(ctx, workspaceID, id, "/regenerate")
 }
 
-// PublishArticle queues the article for publishing to the configured target.
+// SubmitArticle moves a draft, failed or rejected article to in_review.
+// Any other status answers 409 (IsConflict).
+func (s *BlogService) SubmitArticle(ctx context.Context, workspaceID, id string) (*BlogArticle, error) {
+	return s.articleAction(ctx, workspaceID, id, "/submit")
+}
+
+// PublishArticle approves the article and queues it for publishing to the
+// configured target. It must be in review (or already scheduled or failed);
+// a draft answers 409 until SubmitArticle.
 func (s *BlogService) PublishArticle(ctx context.Context, workspaceID, id string) (*BlogArticle, error) {
 	return s.articleAction(ctx, workspaceID, id, "/publish")
 }
 
-// RejectArticle marks a draft rejected so it never auto-publishes.
+// RejectArticle marks an article rejected so it never publishes.
 func (s *BlogService) RejectArticle(ctx context.Context, workspaceID, id string) (*BlogArticle, error) {
 	return s.articleAction(ctx, workspaceID, id, "/reject")
 }
