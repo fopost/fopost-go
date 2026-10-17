@@ -173,6 +173,9 @@ const (
 	EventDeliveryFailed       = "delivery.failed"
 	EventDeliveryDelayed      = "delivery.delayed"
 	EventAccountHealthChanged = "account.health_changed"
+	EventArticlePublished     = "article.published"
+	// EventArticleTest is what Blog.TestWebsite delivers to the website URL.
+	EventArticleTest = "article.test"
 )
 
 // Platforms recognised when connecting an account with credentials.
@@ -189,6 +192,7 @@ const (
 	PlatformMastodon          = "mastodon"
 	PlatformLemmy             = "lemmy"
 	PlatformPinterest         = "pinterest"
+	PlatformSnapchat          = "snapchat"
 	PlatformTelegram          = "telegram"
 	PlatformTwitch            = "twitch"
 	PlatformDiscord           = "discord"

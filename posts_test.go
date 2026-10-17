@@ -283,3 +283,164 @@ func TestPostsCreateSendsAccountGroupWithoutAccounts(t *testing.T) {
 		t.Fatalf("accounts = %v, want it omitted", body["accounts"])
 	}
 }
+
+func TestPostsCreateWithSmallFilesSendsOneMultipartRequest(t *testing.T) {
+	var calls []string
+	var postField string
+	var parts []string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch r.URL.Path {
+		case "/media/limits":
+			_, _ = io.WriteString(w, `{"data":{"maxFileBytes":104857600,"multipartMaxFileBytes":104857600,"maxFilesPerUpload":5}}`)
+		case "/posts":
+			if r.ContentLength <= 0 {
+				t.Errorf("Content-Length = %d, want the exact form length", r.ContentLength)
+			}
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				t.Errorf("ParseMultipartForm: %v", err)
+				return
+			}
+			postField = r.FormValue("post")
+			for _, header := range r.MultipartForm.File["files"] {
+				file, _ := header.Open()
+				data, _ := io.ReadAll(file)
+				file.Close()
+				parts = append(parts, header.Filename+"="+string(data))
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"id":"post_1","status":"draft"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	post, err := client.Posts.Create(context.Background(), &CreatePostRequest{
+		WorkspaceID: "ws_1", Accounts: []string{"acc_1"}, Content: Text("Numbers are in"),
+	},
+		PostFile{Filename: "a.png", MIMEType: "image/png", Reader: strings.NewReader("png-a"), Size: 5},
+		PostFile{Filename: "b.mp4", MIMEType: "video/mp4", Reader: strings.NewReader("mp4-bb"), Size: 6},
+	)
+	if err != nil {
+		t.Fatalf("Posts.Create: %v", err)
+	}
+	if post.ID != "post_1" {
+		t.Fatalf("post = %+v", post)
+	}
+	if strings.Join(calls, ",") != "GET /media/limits,POST /posts" {
+		t.Fatalf("calls = %v", calls)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(postField), &body); err != nil || body["workspace_id"] != "ws_1" {
+		t.Fatalf("post field = %q (%v)", postField, err)
+	}
+	if strings.Join(parts, ",") != "a.png=png-a,b.mp4=mp4-bb" {
+		t.Fatalf("parts = %v", parts)
+	}
+}
+
+func TestPostsCreateWithALargeFileUploadsDirectAndAttaches(t *testing.T) {
+	var calls []string
+	var presign, created map[string]any
+	var putBody []byte
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch r.URL.Path {
+		case "/media/limits":
+			_, _ = io.WriteString(w, `{"data":{"maxFileBytes":5368709120,"multipartMaxFileBytes":4,"maxFilesPerUpload":5}}`)
+		case "/media/presign":
+			_ = json.NewDecoder(r.Body).Decode(&presign)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"uploadId":"up_1","uploadUrl":"http://`+r.Host+`/bucket/up_1","method":"PUT","headers":{},"expiresAt":"2026-09-19T12:00:00Z","maxFileBytes":5368709120}}`)
+		case "/bucket/up_1":
+			putBody, _ = io.ReadAll(r.Body)
+		case "/media/presign/up_1/complete":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"id":"med_1","type":"video","name":"clip.mp4","url":"https://cdn/clip.mp4","size":6}}`)
+		case "/posts":
+			if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+				t.Errorf("Content-Type = %q, want JSON on the direct path", r.Header.Get("Content-Type"))
+			}
+			_ = json.NewDecoder(r.Body).Decode(&created)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"data":{"id":"post_1","status":"draft"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	_, err := client.Posts.Create(context.Background(), &CreatePostRequest{WorkspaceID: "ws_1", Content: Text("Watch")},
+		PostFile{Filename: "clip.mp4", MIMEType: "video/mp4", Reader: strings.NewReader("mp4-bb"), Size: 6})
+	if err != nil {
+		t.Fatalf("Posts.Create: %v", err)
+	}
+	if strings.Join(calls, ",") != "GET /media/limits,POST /media/presign,PUT /bucket/up_1,POST /media/presign/up_1/complete,POST /posts" {
+		t.Fatalf("calls = %v", calls)
+	}
+	if presign["workspaceId"] != "ws_1" || presign["size"] != float64(6) || string(putBody) != "mp4-bb" {
+		t.Fatalf("presign = %v put = %q", presign, putBody)
+	}
+	blocks := created["content"].([]any)
+	media := blocks[0].(map[string]any)["media"].([]any)[0].(map[string]any)
+	if media["type"] != "video" || media["url"] != "https://cdn/clip.mp4" || media["name"] != "clip.mp4" || media["size"] != float64(6) {
+		t.Fatalf("media = %v", media)
+	}
+}
+
+func TestPostsUpdateWithoutContentAppendsToTheCurrentBlock(t *testing.T) {
+	var calls []string
+	var presign, updated map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch {
+		case r.URL.Path == "/media/limits":
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == "GET" && r.URL.Path == "/posts/post_1":
+			_, _ = io.WriteString(w, `{"data":{"id":"post_1","workspace_id":"ws_9","content":[{"text":"Keep me","media":[{"type":"image","url":"https://cdn/old.png"}]}]}}`)
+		case r.URL.Path == "/media/presign":
+			_ = json.NewDecoder(r.Body).Decode(&presign)
+			_, _ = io.WriteString(w, `{"data":{"uploadId":"up_1","uploadUrl":"http://`+r.Host+`/bucket/up_1","method":"PUT","headers":{}}}`)
+		case r.URL.Path == "/bucket/up_1":
+			_, _ = io.Copy(io.Discard, r.Body)
+		case r.URL.Path == "/media/presign/up_1/complete":
+			_, _ = io.WriteString(w, `{"data":{"id":"med_2","type":"image","name":"big.png","url":"https://cdn/big.png","size":200000000}}`)
+		case r.Method == "PUT" && r.URL.Path == "/posts/post_1":
+			_ = json.NewDecoder(r.Body).Decode(&updated)
+			_, _ = io.WriteString(w, `{"data":{"id":"post_1"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	// Limits fails, so the 100 MB default decides: this file is over it.
+	big := io.LimitReader(zeroReader{}, 200_000_000)
+	_, err := client.Posts.Update(context.Background(), "post_1", nil,
+		PostFile{Filename: "big.png", MIMEType: "image/png", Reader: big, Size: 200_000_000})
+	if err != nil {
+		t.Fatalf("Posts.Update: %v", err)
+	}
+	if strings.Join(calls, ",") != "GET /media/limits,GET /posts/post_1,POST /media/presign,PUT /bucket/up_1,POST /media/presign/up_1/complete,PUT /posts/post_1" {
+		t.Fatalf("calls = %v", calls)
+	}
+	if presign["workspaceId"] != "ws_9" {
+		t.Fatalf("presign = %v, want the post's workspace", presign)
+	}
+	block := updated["content"].([]any)[0].(map[string]any)
+	media := block["media"].([]any)
+	if block["text"] != "Keep me" || len(media) != 2 || media[1].(map[string]any)["url"] != "https://cdn/big.png" {
+		t.Fatalf("block = %v", block)
+	}
+}
+
+func TestPostsCreateRefusesTooManyFiles(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("no request should be sent")
+	})
+	files := make([]PostFile, MaxPostFiles+1)
+	for i := range files {
+		files[i] = PostFile{Filename: "a.png", MIMEType: "image/png", Reader: strings.NewReader("x"), Size: 1}
+	}
+	if _, err := client.Posts.Create(context.Background(), &CreatePostRequest{WorkspaceID: "ws_1"}, files...); err == nil {
+		t.Fatal("expected an error with too many files")
+	}
+}

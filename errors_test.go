@@ -88,3 +88,23 @@ func TestPredicatesIgnoreNonAPIErrors(t *testing.T) {
 		t.Fatal("a plain error is not an API error")
 	}
 }
+
+func TestFileTooLargeIsA413WithTheCeiling(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		_, _ = io.WriteString(w, `{"error":"file_too_large","message":"too big","max_file_bytes":104857600,"file_bytes":209715200,"upgrade_url":"/settings/billing"}`)
+	})
+
+	_, err := client.Media.Presign(context.Background(), &PresignInput{WorkspaceID: "ws_1", Filename: "a.mp4", MimeType: "video/mp4", Size: 200 << 20})
+	if !IsPayloadTooLarge(err) || CodeOf(err) != "file_too_large" {
+		t.Fatalf("err = %v, want a 413 file_too_large", err)
+	}
+	apiErr, _ := APIError(err)
+	if apiErr.Status != 413 || apiErr.MaxFileBytes() != 100<<20 || apiErr.UpgradeURL() != "/settings/billing" {
+		t.Fatalf("err = %+v", apiErr)
+	}
+	var fileBytes int64
+	if err := apiErr.Field("file_bytes", &fileBytes); err != nil || fileBytes != 200<<20 {
+		t.Fatalf("file_bytes = %d, %v", fileBytes, err)
+	}
+}

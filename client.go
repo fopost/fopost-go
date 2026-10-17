@@ -60,9 +60,18 @@ type Client struct {
 	Automations   *AutomationsService
 	Media         *MediaService
 	Inbox         *InboxService
+	Contacts      *ContactsService
+	Broadcasts    *BroadcastsService
+	Sequences     *SequencesService
+	Knowledge     *KnowledgeService
 	Ads           *AdsService
+	GoogleAds     *GoogleAdsService
 	Validate      *ValidateService
 	WhatsApp      *WhatsAppService
+	Activity      *ActivityService
+
+	GoogleBusiness *GoogleBusinessService
+	Blog           *BlogService
 }
 
 // Option configures a Client.
@@ -149,14 +158,22 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.AccountGroups = &AccountGroupsService{client: c}
 	c.Communities = &CommunitiesService{client: c}
 	c.Labels = &LabelsService{client: c}
+	c.Activity = &ActivityService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}
 	c.Media = &MediaService{client: c}
 	c.Inbox = &InboxService{client: c}
+	c.Contacts = &ContactsService{client: c}
+	c.Broadcasts = &BroadcastsService{client: c}
+	c.Sequences = &SequencesService{client: c}
+	c.Knowledge = &KnowledgeService{client: c}
 	c.Ads = &AdsService{client: c}
+	c.GoogleBusiness = &GoogleBusinessService{client: c}
+	c.GoogleAds = &GoogleAdsService{client: c}
 	c.Validate = &ValidateService{client: c}
 	c.WhatsApp = &WhatsAppService{client: c}
+	c.Blog = &BlogService{client: c}
 
 	return c, nil
 }
@@ -171,6 +188,10 @@ type request struct {
 	query       url.Values
 	body        []byte
 	contentType string
+	// stream, when set, is sent instead of body; it cannot be replayed, so
+	// the call is never retried.
+	stream       io.Reader
+	streamLength int64
 	// unwrap peels a {"data": ...} envelope off the response before decoding.
 	unwrap bool
 }
@@ -213,9 +234,16 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 	}
 
 	for attempt := 1; ; attempt++ {
-		httpReq, err := http.NewRequestWithContext(ctx, req.method, endpoint, bodyReader(req.body))
+		var body io.Reader = bodyReader(req.body)
+		if req.stream != nil {
+			body = req.stream
+		}
+		httpReq, err := http.NewRequestWithContext(ctx, req.method, endpoint, body)
 		if err != nil {
 			return fmt.Errorf("fopost: building request: %w", err)
+		}
+		if req.stream != nil {
+			httpReq.ContentLength = req.streamLength
 		}
 		httpReq.Header.Set("Accept", "application/json")
 		httpReq.Header.Set("X-API-Key", c.apiKey)
@@ -231,7 +259,7 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 				return err
 			}
 			wrapped := fmt.Errorf("fopost: %s %s: %w", req.method, req.path, err)
-			if attempt >= c.maxRetries {
+			if attempt >= c.maxRetries || req.stream != nil {
 				return wrapped
 			}
 			if err := sleep(ctx, backoff(attempt)); err != nil {
@@ -246,7 +274,7 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 		}
 
 		apiErr, isAPIErr := APIError(err)
-		if !isAPIErr || attempt >= c.maxRetries || !retryable(apiErr.Status) {
+		if !isAPIErr || attempt >= c.maxRetries || !retryable(apiErr.Status) || req.stream != nil {
 			return err
 		}
 		wait := backoff(attempt)
