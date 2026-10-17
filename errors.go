@@ -44,6 +44,17 @@ func (e *Error) UpgradeURL() string {
 	return body.UpgradeURL
 }
 
+// MaxFileBytes is the ceiling a 413 file_too_large reports, or 0 if absent.
+func (e *Error) MaxFileBytes() int64 {
+	var body struct {
+		MaxFileBytes int64 `json:"max_file_bytes"`
+	}
+	if json.Unmarshal(e.Body, &body) != nil {
+		return 0
+	}
+	return body.MaxFileBytes
+}
+
 // Field decodes an extra field some errors carry alongside error and message.
 func (e *Error) Field(name string, out any) error {
 	var body map[string]json.RawMessage
@@ -101,6 +112,12 @@ func IsNotFound(err error) bool { return StatusOf(err) == http.StatusNotFound }
 
 // IsConflict reports a 409 — the resource is in a state that forbids the change.
 func IsConflict(err error) bool { return StatusOf(err) == http.StatusConflict }
+
+// IsPayloadTooLarge reports a 413 — a file over the account's ceiling. The
+// ceiling is in Error.MaxFileBytes.
+func IsPayloadTooLarge(err error) bool {
+	return StatusOf(err) == http.StatusRequestEntityTooLarge
+}
 
 // IsRateLimited reports a 429. The wait the API asked for is in Error.RetryAfter.
 func IsRateLimited(err error) bool { return StatusOf(err) == http.StatusTooManyRequests }

@@ -108,20 +108,60 @@ content := []fopost.ContentBlock{{
 }}
 ```
 
-Larger files can go straight to storage instead of through the API. `UploadDirect`
-presigns a slot, PUTs the bytes to it with no API key, and completes the upload:
+Files can also ride along with the post itself. `Posts.Create` and `Posts.Update`
+take `PostFile`s after the body; they land in the workspace library and attach
+to the first content block. Small files travel in the same request as the post;
+anything over the multipart ceiling is sent straight to storage first and
+attached by URL. The caller never sees the split.
 
 ```go
-data, _ := os.ReadFile("clip.mp4")
+clip, err := fopost.OpenPostFile("clip.mp4")
+if err != nil {
+	log.Fatal(err)
+}
+defer clip.Close()
 
-uploaded, err := client.Media.UploadDirect(ctx, workspace.ID, "clip.mp4", "video/mp4", data)
+post, err := client.Posts.Create(ctx, &fopost.CreatePostRequest{
+	WorkspaceID: workspace.ID,
+	Accounts:    []string{account.ID},
+	Content:     fopost.Text("Watch this"),
+}, *clip)
+```
+
+A post takes up to `fopost.MaxPostFiles` files. `Media.Limits` reports what the
+account may upload: `MaxFileBytes` is the largest file any route accepts and
+grows with the number of connected accounts (or the Large Uploads add-on), and
+`MultipartMaxFileBytes` is what one multipart request carries per file.
+
+```go
+limits, err := client.Media.Limits(ctx, workspace.ID) // "" for the key's default
+fmt.Println(limits.MaxFileBytes, limits.MultipartMaxFileBytes, limits.NextTier)
+```
+
+Larger files can go straight to storage instead of through the API. `UploadDirect`
+presigns a slot, streams the bytes to it with no API key, and completes the upload.
+It reads from an `io.Reader` with a declared size, so nothing is held in memory:
+
+```go
+file, _ := os.Open("clip.mp4")
+defer file.Close()
+info, _ := file.Stat()
+
+uploaded, err := client.Media.UploadDirect(ctx, &fopost.PresignInput{
+	WorkspaceID: workspace.ID,
+	Filename:    "clip.mp4",
+	MimeType:    "video/mp4",
+	Size:        info.Size(),
+}, file)
 if err != nil {
 	log.Fatal(err)
 }
 ```
 
 `Presign` and `Complete` are the two halves when you want to send the bytes
-yourself.
+yourself. A file over the account's ceiling is a `413` with code `file_too_large`;
+`fopost.IsPayloadTooLarge(err)` spots it and `(*Error).MaxFileBytes()` reads the
+ceiling it reports.
 
 ## Scheduling and publishing
 
@@ -156,6 +196,32 @@ for _, platform := range check.Platforms {
 length, _ := client.Validate.Length(ctx, &fopost.ValidateLengthRequest{Text: "Hello", Platforms: []string{"bluesky"}})
 media, _ := client.Validate.Media(ctx, "https://yourbrand.com/chart.png")
 fmt.Println(length.OK, media.OK, media.Issues)
+```
+
+`WhatsApp` reaches a WhatsApp Business number the customer already owns. The
+platform owns the templates, flows, profile and commerce settings, so every call
+is live and all of it answers 503 until WhatsApp is set up:
+
+```go
+// Filing a template returns the review status the platform gave it, never an
+// assumed one.
+template, _ := client.WhatsApp.CreateTemplate(ctx, accountID, &fopost.CreateWhatsAppTemplateRequest{
+	Name:       "order_shipped",
+	Language:   "en_US",
+	Category:   "UTILITY",
+	Components: []map[string]any{{"type": "BODY", "text": "Your order is on its way."}},
+})
+fmt.Println(template.Status) // PENDING until the platform approves it
+
+// A flow is created as a draft, its screens uploaded, then published.
+flow, _ := client.WhatsApp.CreateFlow(ctx, accountID, &fopost.CreateWhatsAppFlowRequest{
+	Name:       "Book a fitting",
+	Categories: []string{"LEAD_GENERATION"},
+})
+client.WhatsApp.UploadFlowJSON(ctx, accountID, flow.ID, map[string]any{"version": "7.0", "screens": []any{}})
+client.WhatsApp.PublishFlow(ctx, accountID, flow.ID)
+answers, _ := client.WhatsApp.FlowResponses(ctx, accountID)
+fmt.Println(len(answers))
 ```
 
 `Preflight` reports per-account blockers and advisory signals without publishing,
@@ -194,6 +260,50 @@ err := client.Posts.Each(ctx, &fopost.ListPostsParams{WorkspaceID: workspace.ID}
 ```
 
 Zero-valued parameters are not sent, so the API applies its own defaults.
+
+## Analytics
+
+```go
+// How long a post keeps earning, from the repeated readings of each post
+decay, err := client.Analytics.Decay(ctx, &fopost.AnalyticsParams{Days: 30})
+fmt.Println(decay.HalfLifeBucket) // e.g. "1h_3h"
+
+// Whether posting more earned more
+cadence, err := client.Analytics.Frequency(ctx, &fopost.AnalyticsParams{Days: 90})
+if cadence.Best != nil {
+    fmt.Println(cadence.Best.Label) // e.g. "3-5 a week"
+}
+
+// Every reading held for one post, with what moved between them
+timeline, err := client.Analytics.Timeline(ctx, post.ID)
+
+// Mirror the metrics into your own store, without refetching everything
+cursor := ""
+for {
+    page, err := client.Analytics.Changes(ctx, &fopost.MetricChangesParams{Since: cursor})
+    if err != nil {
+        return err
+    }
+    save(page.Changes)
+    if !page.HasMore {
+        break
+    }
+    cursor = page.Cursor.String()
+}
+
+// Refresh one post now instead of waiting for the next collection run
+_, err = client.Analytics.CollectPost(ctx, post.ID)
+
+// Posts on the account that never went out through FoPost
+native, err := client.Analytics.NativePosts(ctx, accounts[0].ID, nil)
+```
+
+A post is addressed by its FoPost id or by its permalink, so a post made by
+hand on the network works the same way:
+
+```go
+client.Analytics.Timeline(ctx, "https://x.com/acme/status/1")
+```
 
 ## Configuration
 
@@ -245,6 +355,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | 403    | `IsForbidden`        | valid key, but no scope or workspace access     |
 | 404    | `IsNotFound`         | no such resource, or outside the key's reach    |
 | 409    | `IsConflict`         | the resource's state forbids the change         |
+| 413    | `IsPayloadTooLarge`  | a file over the account's ceiling               |
 | 429    | `IsRateLimited`      | over the plan's per-minute ceiling              |
 
 `StatusOf` and `CodeOf` read the same fields off any error, and
@@ -256,18 +367,43 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Posts`       | `List`, `Each`, `ListAll`, `Get`, `Create`, `Update`, `Delete`, `Duplicate`, `Publish`, `Retry`, `Cancel`, `Preflight`, `Deliveries`, `PublishRuns`, `Analytics`, `BulkShift`, `BulkLabel`, `BulkDelete`, `ValidateBulkImport`, `CommitBulkImport`, `RollbackBulkImport` |
 | `Workspaces`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Analytics`                                                                                                          |
-| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands`, `ListSlackChannels`, `ListSlackMembers`, `GetSlackIdentity`, `UpdateSlackIdentity` |
+| `Accounts`    | `List`, `ListWithParams`, `Get`, `Create`, `Rename`, `Move`, `Delete`, `SetPrimary`, `Validate`, `Health`, `HealthSummary`, `RefreshToken`, `Analytics`, `CreateTelegramConnectCode`, `GetTelegramConnectStatus`, `GetTelegramBotCommands`, `SetTelegramBotCommands`, `DeleteTelegramBotCommands`, `ListSlackChannels`, `ListSlackMembers`, `GetSlackIdentity`, `UpdateSlackIdentity`, `GetIceBreakers`, `SetIceBreakers`, `DeleteIceBreakers`, `GetPersistentMenu`, `SetPersistentMenu`, `DeletePersistentMenu`, `GetGreeting`, `SetGreeting`, `DeleteGreeting`, `GetWebhookSubscription`, `ResubscribeWebhook`, `ListDiscordChannels`, `SwitchDiscordChannel`, `GetDiscordIdentity`, `UpdateDiscordIdentity`, `ListDiscordPins`, `DeleteDiscordMessage`, `PinDiscordMessage`, `UnpinDiscordMessage`, `CrosspostDiscordMessage`, `CreateDiscordThread`, `SendDiscordDM`, `ListDiscordEvents`, `GetDiscordEvent`, `CreateDiscordEvent`, `UpdateDiscordEvent`, `DeleteDiscordEvent`, `ListDiscordMembers`, `GetDiscordMember`, `ListDiscordRoles`, `CreateDiscordRole`, `UpdateDiscordRole`, `DeleteDiscordRole`, `AddDiscordMemberRole`, `RemoveDiscordMemberRole`, `PlatformMetrics` |
 | `AccountGroups` | `List`, `Get`, `Create`, `Update`, `Delete`, `SetMembers`                                                                                                       |
 | `Communities` | `List`, `Sync`, `Search`, `Add`, `Remove`                                                                                                                         |
 | `Labels`      | `List`, `Get`, `Create`, `Update`, `Delete`                                                                                                                       |
 | `Webhooks`    | `List`, `Create`, `Update`, `Delete`, `Test`                                                                                                                      |
-| `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`                                                           |
+| `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`, `Decay`, `Frequency`, `Timeline`, `Changes`, `CollectPost`, `NativePosts` |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`                                                                           |
-| `Media`       | `List`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                                 |
+| `Media`       | `List`, `Limits`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                               |
+| `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `Handover`, `ListApprovals`, `ApproveReply`, `RejectReply` |
+| `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
+| `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |
+| `Sequences`   | `List`, `Get`, `Create`, `Update`, `Delete`, `Enroll`, `Unenroll`, `Enrollments` |
+| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `Goals`, `Catalogs`, `CreateCatalog`, `Catalog`, `UpdateCatalog`, `DeleteCatalog`, `CatalogProducts`, `WriteCatalogProducts`, `ProductFeeds`, `CreateProductFeed`, `DeleteProductFeed`, `FeedUploads`, `StartFeedUpload`, `ProductSets`, `CreateProductSet`, `UpdateProductSet`, `DeleteProductSet`, `ReachFrequency`, `CreateReachFrequency`, `ReachFrequencyPredictionByID`, `ReserveReachFrequency`, `CancelReachFrequency`, `Library`, `PartnershipCreators`, `RequestPartnership`, `RevokePartnership`, `AccountActivity`, `Labels`, `CreateLabel`, `UpdateLabel`, `DeleteLabel`, `ApplyLabel`, `Studies`, `CreateStudy`, `Study`, `DeleteStudy`, `IosCampaignLimits`, `HighDemandPeriods`, `CreateHighDemandPeriod`, `DeleteHighDemandPeriod`, `ValueRuleSets`, `CreateValueRuleSet`, `DeleteValueRuleSet` |
+| `Knowledge`   | `List`, `Create`, `Update`, `Delete`, `Sync`, `Search`                                                                                                           |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply` |
-| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage` |
-| `Blogs`       | `ListBlogs`, `ListArticles`, `GetArticle`, `CreateArticle`, `UpdateArticle`, `DeleteArticle`, `ListProducts`, `UpdateProduct`                            |
+| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `Providers`, `Authorize`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `AddAudienceCompanies`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `BidPricing`, `SupplyForecast`, `ConversionRules`, `CreateConversionRule`, `ConversionRule`, `UpdateConversionRule`, `DeleteConversionRule`, `AttachConversionRule`, `DetachConversionRule`, `ConversionMetrics`, `SendConversionEvents` |
+| `GoogleBusiness` | `GetLocation`, `UpdateLocation`, `GetAttributes`, `UpdateAttributes`, `GetMenus`, `ReplaceMenus`, `GetServices`, `ReplaceServices`, `ListMedia`, `AddMedia`, `DeleteMedia`, `ListPlaceActions`, `CreatePlaceAction`, `UpdatePlaceAction`, `DeletePlaceAction`, `GetVerificationOptions`, `StartVerification`, `CompleteVerification`, `GetPerformance`, `GetSearchKeywords`, `Assign` |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
+| `Activity`    | `List`                                                                                                                                                            |
+| `Blog`        | `GetSettings`, `UpdateSettings`, `RotateWebsiteSecret`, `TestWebsite`, `ListKeywords`, `PlanKeywords`, `AddKeyword`, `UpdateKeyword`, `DeleteKeyword`, `ListArticles`, `RequestArticle`, `GetArticle`, `UpdateArticle`, `RegenerateArticle`, `PublishArticle`, `RejectArticle`, `DeleteArticle` |
+| `Blogs`       | `ListBlogs`, `ListArticles`, `GetArticle`, `CreateArticle`, `UpdateArticle`, `DeleteArticle`, `ListProducts`, `UpdateProduct` |
+
+`Activity.List` reads what happened in a workspace, newest first.
+`ActivityKindSecurity` is the audit log: members joining, leaving or changing
+role and access, and changes to two-step verification, passkeys, single sign-on
+and signed-in devices. Those rows are append-only and never expire.
+
+```go
+page, err := client.Activity.List(ctx, &fopost.ListActivityParams{
+    WorkspaceID: workspaceID,
+    Kind:        fopost.ActivityKindSecurity,
+})
+for _, event := range page.Events {
+    fmt.Printf("%s %s: %s\n", event.Time, event.Actor.Name, event.Summary)
+}
+// page.NextCursor is empty at the end of the list.
+```
 
 For an endpoint the SDK does not wrap yet, `Do` sends an authenticated request
 and decodes the body as it came:
@@ -277,12 +413,98 @@ var body map[string]any
 err := client.Do(ctx, "GET", "/platforms", nil, nil, &body)
 ```
 
+## Broadcasts and sequences
+
+A broadcast is one message into every conversation you already have with a segment of your contacts; a sequence is a series of them on a delay. Neither opens a cold DM.
+
+Nothing is sent into a closed messaging window: Messenger and Instagram take a business-initiated message only within 24 hours of the contact's last one, so recipients outside it come back skipped with `window_closed` rather than attempted. Telegram, Slack, Bluesky and Reddit have no window. The number sent is therefore often lower than the audience, and that is correct rather than a failure.
+
+Reading needs the `inbox` scope; `Send`, `Cancel`, `Enroll` and `Unenroll` also need `publish`.
+
+```go
+broadcast, err := client.Broadcasts.Create(ctx, &fopost.CreateBroadcastRequest{
+    WorkspaceID: workspaceID,
+    AccountID:   accountID,
+    Name:        "September check-in",
+    Text:        "New colours just landed. Want a look?",
+    Audience:    &fopost.AudienceFilter{Platforms: []string{"instagram"}},
+})
+
+// Recipients is how many contacts matched, not how many will be messaged.
+sent, err := client.Broadcasts.Send(ctx, broadcast.ID)
+
+// Who was skipped, and why.
+page, err := client.Broadcasts.Recipients(ctx, broadcast.ID, &fopost.ListRecipientsParams{
+    Status: fopost.RecipientSkipped,
+})
+for _, r := range page.Data {
+    fmt.Printf("%s: %s\n", r.DisplayName, r.SkipReason)
+}
+
+sequence, err := client.Sequences.Create(ctx, &fopost.CreateSequenceRequest{
+    WorkspaceID: workspaceID,
+    AccountID:   accountID,
+    Name:        "Welcome",
+    Steps: []fopost.SequenceStep{
+        {DelayHours: 0, Text: "Thanks for the follow — anything I can help with?"},
+        {DelayHours: 48, Text: "Here is what people usually ask us first."},
+    },
+})
+
+_, err = client.Sequences.Enroll(ctx, sequence.ID, &fopost.EnrollRequest{
+    ContactIDs: []string{contactID},
+})
+// Nothing further fires for them.
+_, err = client.Sequences.Unenroll(ctx, sequence.ID, []string{contactID})
+```
+
+## Blog
+
+`Blog` plans keywords, writes articles and publishes them to a website. A post
+goes to a social network; an article goes to a website. Reads and settings need
+`posts`; `PlanKeywords`, `RequestArticle` and `RegenerateArticle` spend credits
+and need `ai` (an empty balance is a `402`, see `UpgradeURL`); `PublishArticle`
+needs `publish` and answers `409` `no_target` until the settings name a target.
+
+```go
+article, err := client.Blog.RequestArticle(ctx, workspaceID, &fopost.RequestBlogArticleRequest{
+    Keyword:      "trail running shoes",
+    Instructions: "Compare three models and close with a buying checklist",
+})
+// article.Status is "queued"; poll client.Blog.GetArticle until it is "draft".
+```
+
+With `TargetKind` set to `fopost.BlogTargetWebsite` and a `WebsiteURL`, every
+published article is POSTed to that URL as a signed `article.published`
+delivery. `UpdateSettings` returns the signing secret once, when the URL is
+first set. `VerifyWebhook` checks the signature over the raw bytes, in constant
+time, and refuses a timestamp more than five minutes off:
+
+```go
+func handle(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+    envelope, err := fopost.VerifyWebhook(body, r.Header, os.Getenv("FOPOST_WEBHOOK_SECRET"))
+    if err != nil {
+        http.Error(w, "invalid signature", http.StatusUnauthorized)
+        return
+    }
+    if envelope.Event == fopost.EventArticlePublished {
+        var article fopost.BlogArticlePublished
+        _ = envelope.Decode(&article)
+        // article.BodyHTML, article.Images (URLs valid for six hours; store your own copy)
+    }
+    w.WriteHeader(http.StatusOK)
+}
+```
+
+The same helper verifies every FoPost webhook, not only the blog ones.
+
 ## Scopes and limits
 
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
-`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`,
-`ads`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
+`workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`
+(which also covers `Knowledge`), `ads`, `ai`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
 and the create, update, delete and duplicate calls on campaigns, ad sets and
 network ads spend money and need `publish` as well as `ads`; a boost, ad or new
 campaign object starts paused unless `Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
@@ -303,6 +525,22 @@ export FOPOST_API_KEY=fp_...
 go run ./examples/create-post "Hello from the Go SDK" --publish
 ```
 
+## Chatbots and the inbox
+
+The [chat adapter](https://fopost.com/docs/sdks/chat-adapter) turns the FoPost inbox into one send/receive channel for a chatbot
+framework. It ships in the TypeScript and Python SDKs. There is no dedicated adapter here and no
+API change behind it, so the same loop is three pieces with this client:
+
+1. **Verify** the `inbox.message_received` webhook. The payload is ids only, on purpose, so
+   nothing a customer wrote sits in your logs. The [signing scheme](https://fopost.com/docs/webhooks/verification)
+   is HMAC-SHA256 over `{timestamp}.{body}`, refused past a five minute tolerance.
+2. **Read** the item back with `client.Inbox.List(ctx, …)`, filtered to the payload's
+   `accountId` and matched on its `itemId`.
+3. **Answer** with `client.Inbox.Reply(ctx, item.ID, text)`, or open a thread with
+   `client.Inbox.StartConversation(ctx, …)`.
+
+Reading needs the `inbox` scope; answering needs `publish` as well.
+
 ## Contributing
 
 Issues and pull requests are welcome at
@@ -320,3 +558,31 @@ gofmt -l .
 MIT. See [LICENSE](LICENSE).
 
 Questions or a problem: [fopost.com/contact](https://fopost.com/contact).
+
+### Google Ads
+
+Campaigns, ad groups, ads, audiences and insights are on `client.Ads` and dispatch by
+connection. What only Google has is on `client.GoogleAds`:
+
+```go
+scope := fopost.GoogleScope{ConnectionID: "c4d5e6f7-…", CustomerID: "1234567890"}
+
+keywords, err := client.GoogleAds.Keywords(ctx, scope, nil)
+
+id, err := client.GoogleAds.CreateKeyword(ctx, &fopost.CreateGoogleKeywordRequest{
+    GoogleScope: fopost.GoogleScope{
+        WorkspaceID:  "7d2b8c11-…",
+        ConnectionID: "c4d5e6f7-…",
+        CustomerID:   "1234567890",
+    },
+    AdGroupID: "1234567890~adGroup~77",
+    Text:      "running shoes",
+    MatchType: fopost.GoogleMatchExact,
+})
+```
+
+Also `KeywordIdeas`, `KeywordMetrics`, `SearchTerms`, `BidStrategies`, `AdSchedule` and
+`SetAdSchedule`, the negative keyword lists, `Assets` and `AssetGroups`,
+`LocalServicesLeads`, the conversion methods, and `Query` for a raw read-only GAQL
+SELECT. Changes need the `publish` scope as well as `ads`; `CustomerID` has to name an
+account the connection's grant reaches.

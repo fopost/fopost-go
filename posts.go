@@ -2,9 +2,14 @@ package fopost
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 // PostsService covers posts, publishing, deliveries, and bulk operations.
@@ -205,10 +210,79 @@ type CreatePostRequest struct {
 	CompanionOf *string        `json:"companion_of,omitempty"`
 }
 
-// Create composes a draft or a scheduled post.
-func (s *PostsService) Create(ctx context.Context, body *CreatePostRequest) (*Post, error) {
+// PostFile is a local file to attach to a post. Size must be the exact byte
+// length of Reader.
+type PostFile struct {
+	Filename string
+	MIMEType string
+	Reader   io.Reader
+	Size     int64
+}
+
+// OpenPostFile opens path as a PostFile, sizing it and guessing its MIME type
+// from the extension. Close it when the request has returned.
+func OpenPostFile(path string) (*PostFile, error) {
+	handle, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("fopost: opening %s: %w", path, err)
+	}
+	info, err := handle.Stat()
+	if err != nil {
+		handle.Close()
+		return nil, fmt.Errorf("fopost: reading %s: %w", path, err)
+	}
+	mimeType := mime.TypeByExtension(filepath.Ext(path))
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	return &PostFile{Filename: filepath.Base(path), MIMEType: mimeType, Reader: handle, Size: info.Size()}, nil
+}
+
+// Close closes the Reader when it is closable.
+func (f *PostFile) Close() error {
+	if closer, ok := f.Reader.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// MaxPostFiles is how many files one post request may carry.
+const MaxPostFiles = 5
+
+// Create composes a draft or a scheduled post. Files, if any, are stored in
+// the workspace library and attached to the first content block; files over
+// the multipart ceiling go through UploadDirect and the result is the same.
+func (s *PostsService) Create(ctx context.Context, body *CreatePostRequest, files ...PostFile) (*Post, error) {
 	out := &Post{}
-	if err := s.client.json(ctx, "POST", "/posts", body, nil, out); err != nil {
+	if len(files) == 0 {
+		if err := s.client.json(ctx, "POST", "/posts", body, nil, out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if body == nil {
+		return nil, fmt.Errorf("fopost: a post body is required")
+	}
+	if err := checkPostFiles(files); err != nil {
+		return nil, err
+	}
+	if s.fitsMultipart(ctx, body.WorkspaceID, files) {
+		if err := s.sendWithFiles(ctx, "POST", "/posts", body, files, out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	request := *body
+	request.Content = append([]ContentBlock(nil), body.Content...)
+	if len(request.Content) == 0 {
+		request.Content = []ContentBlock{{}}
+	}
+	attached, err := s.uploadDirect(ctx, body.WorkspaceID, files)
+	if err != nil {
+		return nil, err
+	}
+	request.Content[0].Media = append(request.Content[0].Media, attached...)
+	if err := s.client.json(ctx, "POST", "/posts", &request, nil, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -236,13 +310,143 @@ type UpdatePostRequest struct {
 	Settings          map[string]any `json:"settings,omitempty"`
 }
 
-// Update edits a post that has not been published.
-func (s *PostsService) Update(ctx context.Context, id string, body *UpdatePostRequest) (*Post, error) {
+// Update edits a post that has not been published. Files are attached the
+// way Create attaches them; without Content, large files are appended to the
+// post's current first block.
+func (s *PostsService) Update(ctx context.Context, id string, body *UpdatePostRequest, files ...PostFile) (*Post, error) {
 	out := &Post{}
-	if err := s.client.json(ctx, "PUT", "/posts/"+url.PathEscape(id), body, nil, out); err != nil {
+	path := "/posts/" + url.PathEscape(id)
+	if len(files) == 0 {
+		if err := s.client.json(ctx, "PUT", path, body, nil, out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if err := checkPostFiles(files); err != nil {
+		return nil, err
+	}
+	if body == nil {
+		body = &UpdatePostRequest{}
+	}
+	if s.fitsMultipart(ctx, "", files) {
+		if err := s.sendWithFiles(ctx, "PUT", path, body, files, out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	// The direct path needs the workspace for presign, so the post is read once.
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	request := *body
+	request.Content = append([]ContentBlock(nil), body.Content...)
+	if len(request.Content) == 0 {
+		request.Content = append(request.Content, current.Content...)
+	}
+	if len(request.Content) == 0 {
+		request.Content = []ContentBlock{{}}
+	}
+	attached, err := s.uploadDirect(ctx, current.WorkspaceID, files)
+	if err != nil {
+		return nil, err
+	}
+	request.Content[0].Media = append(request.Content[0].Media, attached...)
+	if err := s.client.json(ctx, "PUT", path, &request, nil, out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+func checkPostFiles(files []PostFile) error {
+	if len(files) > MaxPostFiles {
+		return fmt.Errorf("fopost: a post takes at most %d files, got %d", MaxPostFiles, len(files))
+	}
+	for _, file := range files {
+		if file.Reader == nil {
+			return fmt.Errorf("fopost: file %q has no content", file.Filename)
+		}
+		if file.Size <= 0 {
+			return fmt.Errorf("fopost: file %q needs its byte size", file.Filename)
+		}
+	}
+	return nil
+}
+
+// fitsMultipart reports whether every file is under the multipart ceiling,
+// reading it from Limits and falling back to the default when that fails.
+func (s *PostsService) fitsMultipart(ctx context.Context, workspaceID string, files []PostFile) bool {
+	ceiling := DefaultMultipartMaxFileBytes
+	if limits, err := s.client.Media.Limits(ctx, workspaceID); err == nil && limits.MultipartMaxFileBytes > 0 {
+		ceiling = limits.MultipartMaxFileBytes
+	}
+	for _, file := range files {
+		if file.Size > ceiling {
+			return false
+		}
+	}
+	return true
+}
+
+// sendWithFiles streams the JSON body in a "post" field with the files beside it.
+func (s *PostsService) sendWithFiles(ctx context.Context, method, path string, body any, files []PostFile, out any) error {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("fopost: encoding request body: %w", err)
+	}
+	parts := make([]streamFile, 0, len(files))
+	for _, file := range files {
+		name := file.Filename
+		if name == "" {
+			name = "upload"
+		}
+		parts = append(parts, streamFile{fileField: fileField{field: "files", filename: name, reader: file.Reader}, size: file.Size})
+	}
+	stream, contentType, length, err := streamMultipart(map[string]string{"post": string(encoded)}, parts)
+	if err != nil {
+		return err
+	}
+	return s.client.do(ctx, &request{
+		method:       method,
+		path:         path,
+		stream:       stream,
+		streamLength: length,
+		contentType:  contentType,
+		unwrap:       true,
+	}, out)
+}
+
+func (s *PostsService) uploadDirect(ctx context.Context, workspaceID string, files []PostFile) ([]MediaItem, error) {
+	items := make([]MediaItem, 0, len(files))
+	for _, file := range files {
+		uploaded, err := s.client.Media.UploadDirect(ctx, &PresignInput{
+			WorkspaceID: workspaceID,
+			Filename:    file.Filename,
+			MimeType:    file.MIMEType,
+			Size:        file.Size,
+		}, file.Reader)
+		if err != nil {
+			return nil, err
+		}
+		item := uploaded.AsMediaItem()
+		if item.Type == "" {
+			item.Type = mediaTypeFor(file.MIMEType)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// mediaTypeFor maps a MIME type onto a content-block media type.
+func mediaTypeFor(mimeType string) string {
+	switch {
+	case mimeType == "image/gif":
+		return "gif"
+	case strings.HasPrefix(mimeType, "video/"):
+		return "video"
+	default:
+		return "image"
+	}
 }
 
 // Delete removes a post.
