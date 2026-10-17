@@ -15,13 +15,16 @@ func TestBlogSettingsPatchKeepsTheSecretBesideTheData(t *testing.T) {
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		method, path = r.Method, r.URL.Path
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		_, _ = io.WriteString(w, `{"data":{"language":"en","cadencePerWeek":2,"reviewHoldDays":3,"autoPublish":false,"imageTier":"standard","targetKind":"website","websiteUrl":"https://yourbrand.com/fopost","hasWebsiteSecret":true,"keywordDataAvailable":true,"updatedAt":"2026-10-11T09:00:00.000Z"},"websiteSecret":"whsec_first"}`)
+		_, _ = io.WriteString(w, `{"data":{"goal":"leads","focusTopics":"trail gear","avoidTopics":"politics","language":"en","cadencePerWeek":2,"reviewHoldDays":3,"imageTier":"standard","targetKind":"website","websiteUrl":"https://yourbrand.com/fopost","hasWebsiteSecret":true,"keywordDataAvailable":true,"updatedAt":"2026-10-11T09:00:00.000Z"},"websiteSecret":"whsec_first"}`)
 	})
 
 	updated, err := client.Blog.UpdateSettings(context.Background(), "ws_1", &UpdateBlogSettingsRequest{
 		TargetKind:     String(BlogTargetWebsite),
 		WebsiteURL:     String("https://yourbrand.com/fopost"),
 		CadencePerWeek: Int(2),
+		Goal:           String(BlogGoalLeads),
+		FocusTopics:    String("trail gear"),
+		AvoidTopics:    String("politics"),
 	})
 	if err != nil {
 		t.Fatalf("Blog.UpdateSettings: %v", err)
@@ -32,14 +35,20 @@ func TestBlogSettingsPatchKeepsTheSecretBesideTheData(t *testing.T) {
 	if body["workspaceId"] != "ws_1" || body["targetKind"] != "website" || body["cadencePerWeek"] != float64(2) {
 		t.Fatalf("body = %+v", body)
 	}
-	if _, ok := body["autoPublish"]; ok {
-		t.Fatalf("autoPublish should be omitted: %+v", body)
+	if body["goal"] != "leads" || body["focusTopics"] != "trail gear" || body["avoidTopics"] != "politics" {
+		t.Fatalf("goal fields = %+v", body)
+	}
+	if _, ok := body["topic"]; ok {
+		t.Fatalf("topic should be omitted: %+v", body)
 	}
 	if updated.WebsiteSecret == nil || *updated.WebsiteSecret != "whsec_first" {
 		t.Fatalf("websiteSecret = %v", updated.WebsiteSecret)
 	}
 	if !updated.Settings.HasWebsiteSecret || *updated.Settings.TargetKind != BlogTargetWebsite || updated.Settings.CadencePerWeek != 2 {
 		t.Fatalf("settings = %+v", updated.Settings)
+	}
+	if *updated.Settings.Goal != BlogGoalLeads || *updated.Settings.FocusTopics != "trail gear" || updated.Settings.PlanRun != nil {
+		t.Fatalf("goal settings = %+v", updated.Settings)
 	}
 }
 
@@ -51,7 +60,7 @@ func TestBlogSettingsReadAndSecretRoutes(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery+" ws="+asString(body["workspaceId"]))
 		switch r.URL.Path {
 		case "/blog/settings":
-			_, _ = io.WriteString(w, `{"data":{"language":"en","cadencePerWeek":0,"reviewHoldDays":3,"autoPublish":false,"hasWebsiteSecret":false,"websiteUrl":null}}`)
+			_, _ = io.WriteString(w, `{"data":{"goal":null,"language":"en","cadencePerWeek":0,"reviewHoldDays":3,"hasWebsiteSecret":false,"websiteUrl":null,"planRun":{"status":"done","error":null,"added":12,"finishedAt":"2026-10-17T08:00:00.000Z"}}}`)
 		case "/blog/settings/website-secret":
 			_, _ = io.WriteString(w, `{"data":{"websiteSecret":"whsec_rotated"}}`)
 		case "/blog/settings/website-test":
@@ -63,8 +72,11 @@ func TestBlogSettingsReadAndSecretRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.GetSettings: %v", err)
 	}
-	if settings.WebsiteURL != nil || settings.HasWebsiteSecret {
+	if settings.WebsiteURL != nil || settings.HasWebsiteSecret || settings.Goal != nil {
 		t.Fatalf("settings = %+v", settings)
+	}
+	if run := settings.PlanRun; run == nil || run.Status != "done" || run.Error != nil || *run.Added != 12 || run.FinishedAt == nil {
+		t.Fatalf("planRun = %+v", settings.PlanRun)
 	}
 	secret, err := client.Blog.RotateWebsiteSecret(context.Background(), "ws_1")
 	if err != nil {
@@ -103,7 +115,7 @@ func TestBlogKeywordsRoutesAndBodies(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
 		switch {
 		case r.Method == http.MethodGet:
-			_, _ = io.WriteString(w, `{"data":[{"id":"kw_1","keyword":"running shoes","searchVolume":1200,"difficulty":34,"cpc":1.5,"intent":"commercial","source":"provider","status":"suggested","plannedFor":null,"createdAt":"2026-10-01T00:00:00.000Z"}]}`)
+			_, _ = io.WriteString(w, `{"data":[{"id":"kw_1","keyword":"running shoes","searchVolume":1200,"difficulty":34,"cpc":1.5,"intent":"commercial","source":"provider","status":"suggested","plannedFor":null,"fitReason":"Buyers compare models before they sign up","createdAt":"2026-10-01T00:00:00.000Z"}]}`)
 		case r.URL.Path == "/blog/keywords/plan":
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = io.WriteString(w, `{"data":{"status":"queued"}}`)
@@ -127,6 +139,9 @@ func TestBlogKeywordsRoutesAndBodies(t *testing.T) {
 	}
 	if len(keywords) != 1 || *keywords[0].SearchVolume != 1200 || *keywords[0].CPC != 1.5 || keywords[0].PlannedFor != nil {
 		t.Fatalf("keywords = %+v", keywords)
+	}
+	if keywords[0].FitReason == nil || *keywords[0].FitReason != "Buyers compare models before they sign up" {
+		t.Fatalf("fitReason = %v", keywords[0].FitReason)
 	}
 	if err := client.Blog.PlanKeywords(ctx, "ws_1", []string{"running"}); err != nil {
 		t.Fatalf("Blog.PlanKeywords: %v", err)
@@ -286,6 +301,75 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 	}
 	if _, ok := bodies[3]["workspaceId"]; ok {
 		t.Fatalf("patch body carries the workspace on the query, not the body: %+v", bodies[3])
+	}
+}
+
+func TestBlogSuggestSeedsSendsSeedsAndPrompt(t *testing.T) {
+	var method, path, query string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		body = nil
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"seeds":["trail running shoes","best trail shoes 2026"]}`)
+	})
+
+	seeds, err := client.Blog.SuggestSeeds(context.Background(), "ws_1", &SuggestBlogSeedsRequest{
+		Seeds:  []string{"trail shoes"},
+		Prompt: "Lean towards beginners",
+	})
+	if err != nil {
+		t.Fatalf("Blog.SuggestSeeds: %v", err)
+	}
+	if method != http.MethodPost || path != "/blog/keywords/suggest" || query != "" {
+		t.Fatalf("%s %s?%s", method, path, query)
+	}
+	if body["workspaceId"] != "ws_1" || body["seeds"].([]any)[0] != "trail shoes" || body["prompt"] != "Lean towards beginners" {
+		t.Fatalf("body = %+v", body)
+	}
+	if len(seeds) != 2 || seeds[0] != "trail running shoes" {
+		t.Fatalf("seeds = %v", seeds)
+	}
+
+	if _, err := client.Blog.SuggestSeeds(context.Background(), "ws_1", nil); err != nil {
+		t.Fatalf("Blog.SuggestSeeds(nil): %v", err)
+	}
+	if _, ok := body["seeds"]; ok {
+		t.Fatalf("seeds should be omitted: %+v", body)
+	}
+	if _, ok := body["prompt"]; ok {
+		t.Fatalf("prompt should be omitted: %+v", body)
+	}
+}
+
+func TestBlogSubmitArticleMovesItToReview(t *testing.T) {
+	var call string
+	var hadBody bool
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		call = r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery
+		raw, _ := io.ReadAll(r.Body)
+		hadBody = len(raw) > 0
+		if r.URL.Path == "/blog/articles/art_2/submit" {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = io.WriteString(w, `{"error":"invalid_status","message":"Only a draft, failed or rejected article can be submitted"}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"wordCount":1200,"status":"in_review","origin":"plan","createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z"}`)
+	})
+	ctx := context.Background()
+
+	article, err := client.Blog.SubmitArticle(ctx, "ws_1", "art_1")
+	if err != nil {
+		t.Fatalf("Blog.SubmitArticle: %v", err)
+	}
+	if call != "POST /blog/articles/art_1/submit?workspaceId=ws_1" || hadBody {
+		t.Fatalf("call = %q, body sent = %v", call, hadBody)
+	}
+	if article.Status != BlogArticleStatusInReview {
+		t.Fatalf("article = %+v", article)
+	}
+	if _, err := client.Blog.SubmitArticle(ctx, "ws_1", "art_2"); !IsConflict(err) {
+		t.Fatalf("expected a 409, got %v", err)
 	}
 }
 
