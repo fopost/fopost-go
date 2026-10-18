@@ -70,6 +70,7 @@ type Client struct {
 	WhatsApp      *WhatsAppService
 	Activity      *ActivityService
 	Queue         *QueueService
+	Logs          *LogsService
 
 	ConnectSessions *ConnectSessionsService
 
@@ -164,6 +165,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Labels = &LabelsService{client: c}
 	c.Activity = &ActivityService{client: c}
 	c.Queue = &QueueService{client: c}
+	c.Logs = &LogsService{client: c}
 	c.ConnectSessions = &ConnectSessionsService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
