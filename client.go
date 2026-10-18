@@ -35,7 +35,7 @@ const (
 	// DefaultMaxRetries counts total attempts, so 3 means two retries.
 	DefaultMaxRetries = 3
 	// Version is the SDK version, reported in the User-Agent.
-	Version = "0.3.0"
+	Version = "0.4.0"
 
 	maxRetryWait  = 60 * time.Second
 	baseRetryWait = 500 * time.Millisecond
@@ -69,6 +69,10 @@ type Client struct {
 	Validate      *ValidateService
 	WhatsApp      *WhatsAppService
 	Activity      *ActivityService
+	Queue         *QueueService
+	Logs          *LogsService
+
+	ConnectSessions *ConnectSessionsService
 
 	GoogleBusiness *GoogleBusinessService
 	Blog           *BlogService
@@ -160,6 +164,9 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Communities = &CommunitiesService{client: c}
 	c.Labels = &LabelsService{client: c}
 	c.Activity = &ActivityService{client: c}
+	c.Queue = &QueueService{client: c}
+	c.Logs = &LogsService{client: c}
+	c.ConnectSessions = &ConnectSessionsService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}

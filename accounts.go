@@ -962,6 +962,7 @@ func (s *AccountsService) discordPath(id, suffix string) string {
 }
 
 // ListDiscordChannels returns the text channels the bot can post to.
+// Wraps the API's `listDiscordChannels` operation.
 func (s *AccountsService) ListDiscordChannels(ctx context.Context, id string) ([]DiscordChannel, error) {
 	var out []DiscordChannel
 	if err := s.client.json(ctx, "GET", s.discordPath(id, "/channels"), nil, nil, &out); err != nil {
@@ -971,6 +972,7 @@ func (s *AccountsService) ListDiscordChannels(ctx context.Context, id string) ([
 }
 
 // SwitchDiscordChannel moves the account to another channel in the same server.
+// Wraps the API's `switchDiscordChannel` operation.
 func (s *AccountsService) SwitchDiscordChannel(ctx context.Context, id, channelID string) (*DiscordChannel, error) {
 	out := &DiscordChannel{}
 	body := map[string]string{"channel_id": channelID}
@@ -981,6 +983,7 @@ func (s *AccountsService) SwitchDiscordChannel(ctx context.Context, id, channelI
 }
 
 // GetDiscordIdentity returns the nickname and avatar the bot wears.
+// Wraps the API's `getDiscordIdentity` operation.
 func (s *AccountsService) GetDiscordIdentity(ctx context.Context, id string) (*DiscordIdentity, error) {
 	out := &DiscordIdentity{}
 	if err := s.client.json(ctx, "GET", s.discordPath(id, "/identity"), nil, nil, out); err != nil {
@@ -990,6 +993,7 @@ func (s *AccountsService) GetDiscordIdentity(ctx context.Context, id string) (*D
 }
 
 // UpdateDiscordIdentity sets the nickname and avatar the bot wears.
+// Wraps the API's `updateDiscordIdentity` operation.
 func (s *AccountsService) UpdateDiscordIdentity(ctx context.Context, id string, body *UpdateDiscordIdentityRequest) (*DiscordIdentity, error) {
 	if body == nil {
 		body = &UpdateDiscordIdentityRequest{}
@@ -1002,6 +1006,7 @@ func (s *AccountsService) UpdateDiscordIdentity(ctx context.Context, id string, 
 }
 
 // ListDiscordPins returns the pinned messages in the account's channel.
+// Wraps the API's `listDiscordPins` operation.
 func (s *AccountsService) ListDiscordPins(ctx context.Context, id string) ([]DiscordMessage, error) {
 	var out []DiscordMessage
 	if err := s.client.json(ctx, "GET", s.discordPath(id, "/messages/pinned"), nil, nil, &out); err != nil {
@@ -1011,6 +1016,7 @@ func (s *AccountsService) ListDiscordPins(ctx context.Context, id string) ([]Dis
 }
 
 // DeleteDiscordMessage removes a message from the account's channel.
+// Wraps the API's `deleteDiscordMessage` operation.
 func (s *AccountsService) DeleteDiscordMessage(ctx context.Context, id, messageID string) error {
 	path := s.discordPath(id, "/messages/"+url.PathEscape(messageID))
 	return s.client.json(ctx, "DELETE", path, nil, nil, nil)
@@ -1055,6 +1061,7 @@ func (s *AccountsService) CreateDiscordThread(ctx context.Context, id, messageID
 }
 
 // SendDiscordDM sends one message to a member of the server.
+// Wraps the API's `sendDiscordDm` operation.
 func (s *AccountsService) SendDiscordDM(ctx context.Context, id, memberID, content string) (*DiscordMessageRef, error) {
 	out := &DiscordMessageRef{}
 	body := map[string]string{"member_id": memberID, "content": content}
@@ -1065,6 +1072,7 @@ func (s *AccountsService) SendDiscordDM(ctx context.Context, id, memberID, conte
 }
 
 // ListDiscordEvents returns the server's scheduled events.
+// Wraps the API's `listDiscordEvents` operation.
 func (s *AccountsService) ListDiscordEvents(ctx context.Context, id string) ([]DiscordScheduledEvent, error) {
 	var out []DiscordScheduledEvent
 	if err := s.client.json(ctx, "GET", s.discordPath(id, "/events"), nil, nil, &out); err != nil {
@@ -1074,6 +1082,7 @@ func (s *AccountsService) ListDiscordEvents(ctx context.Context, id string) ([]D
 }
 
 // GetDiscordEvent returns one scheduled event.
+// Wraps the API's `getDiscordEvent` operation.
 func (s *AccountsService) GetDiscordEvent(ctx context.Context, id, eventID string) (*DiscordScheduledEvent, error) {
 	out := &DiscordScheduledEvent{}
 	path := s.discordPath(id, "/events/"+url.PathEscape(eventID))
@@ -1084,6 +1093,7 @@ func (s *AccountsService) GetDiscordEvent(ctx context.Context, id, eventID strin
 }
 
 // CreateDiscordEvent adds an event to the server's calendar.
+// Wraps the API's `createDiscordEvent` operation.
 func (s *AccountsService) CreateDiscordEvent(ctx context.Context, id string, body *DiscordEventRequest) (*DiscordScheduledEvent, error) {
 	if body == nil {
 		body = &DiscordEventRequest{}
@@ -1096,6 +1106,7 @@ func (s *AccountsService) CreateDiscordEvent(ctx context.Context, id string, bod
 }
 
 // UpdateDiscordEvent changes a scheduled event.
+// Wraps the API's `updateDiscordEvent` operation.
 func (s *AccountsService) UpdateDiscordEvent(ctx context.Context, id, eventID string, body *DiscordEventRequest) (*DiscordScheduledEvent, error) {
 	if body == nil {
 		body = &DiscordEventRequest{}
@@ -1109,6 +1120,7 @@ func (s *AccountsService) UpdateDiscordEvent(ctx context.Context, id, eventID st
 }
 
 // DeleteDiscordEvent removes a scheduled event.
+// Wraps the API's `deleteDiscordEvent` operation.
 func (s *AccountsService) DeleteDiscordEvent(ctx context.Context, id, eventID string) error {
 	path := s.discordPath(id, "/events/"+url.PathEscape(eventID))
 	return s.client.json(ctx, "DELETE", path, nil, nil, nil)
@@ -1116,6 +1128,7 @@ func (s *AccountsService) DeleteDiscordEvent(ctx context.Context, id, eventID st
 
 // ListDiscordMembers returns the server's roster, or the members matching a
 // search when opts.Query is set.
+// Wraps the API's `listDiscordMembers` operation.
 func (s *AccountsService) ListDiscordMembers(ctx context.Context, id string, opts *ListDiscordMembersOptions) ([]DiscordMember, error) {
 	query := url.Values{}
 	if opts != nil {
@@ -1134,6 +1147,7 @@ func (s *AccountsService) ListDiscordMembers(ctx context.Context, id string, opt
 }
 
 // GetDiscordMember returns one member of the server.
+// Wraps the API's `getDiscordMember` operation.
 func (s *AccountsService) GetDiscordMember(ctx context.Context, id, memberID string) (*DiscordMember, error) {
 	out := &DiscordMember{}
 	path := s.discordPath(id, "/members/"+url.PathEscape(memberID))
@@ -1144,6 +1158,7 @@ func (s *AccountsService) GetDiscordMember(ctx context.Context, id, memberID str
 }
 
 // ListDiscordRoles returns the server's roles, highest first.
+// Wraps the API's `listDiscordRoles` operation.
 func (s *AccountsService) ListDiscordRoles(ctx context.Context, id string) ([]DiscordRole, error) {
 	var out []DiscordRole
 	if err := s.client.json(ctx, "GET", s.discordPath(id, "/roles"), nil, nil, &out); err != nil {
@@ -1153,6 +1168,7 @@ func (s *AccountsService) ListDiscordRoles(ctx context.Context, id string) ([]Di
 }
 
 // CreateDiscordRole adds a role to the server.
+// Wraps the API's `createDiscordRole` operation.
 func (s *AccountsService) CreateDiscordRole(ctx context.Context, id string, body *DiscordRoleRequest) (*DiscordRole, error) {
 	if body == nil {
 		body = &DiscordRoleRequest{}
@@ -1165,6 +1181,7 @@ func (s *AccountsService) CreateDiscordRole(ctx context.Context, id string, body
 }
 
 // UpdateDiscordRole changes a role on the server.
+// Wraps the API's `updateDiscordRole` operation.
 func (s *AccountsService) UpdateDiscordRole(ctx context.Context, id, roleID string, body *DiscordRoleRequest) (*DiscordRole, error) {
 	if body == nil {
 		body = &DiscordRoleRequest{}
@@ -1178,6 +1195,7 @@ func (s *AccountsService) UpdateDiscordRole(ctx context.Context, id, roleID stri
 }
 
 // DeleteDiscordRole removes a role from the server.
+// Wraps the API's `deleteDiscordRole` operation.
 func (s *AccountsService) DeleteDiscordRole(ctx context.Context, id, roleID string) error {
 	path := s.discordPath(id, "/roles/"+url.PathEscape(roleID))
 	return s.client.json(ctx, "DELETE", path, nil, nil, nil)

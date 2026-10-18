@@ -198,6 +198,131 @@ func (s *AutomationsService) Trigger(ctx context.Context, id string, payload map
 	return out, nil
 }
 
+// WorkflowNode is one node of an automation's graph.
+type WorkflowNode struct {
+	ID    string  `json:"id"`
+	Kind  string  `json:"kind"`
+	Label *string `json:"label"`
+	// Config is the node's settings, echoed back exactly as authored.
+	Config   map[string]any `json:"config"`
+	Position int            `json:"position"`
+	Layout   *struct {
+		X float64 `json:"x"`
+		Y float64 `json:"y"`
+	} `json:"layout"`
+}
+
+// WorkflowEdge joins two nodes of an automation's graph.
+type WorkflowEdge struct {
+	ID           string  `json:"id"`
+	Source       string  `json:"source"`
+	SourceHandle *string `json:"source_handle"`
+	Target       string  `json:"target"`
+}
+
+// WorkflowGraph is the nodes and edges of one saved version.
+type WorkflowGraph struct {
+	Nodes []WorkflowNode `json:"nodes"`
+	Edges []WorkflowEdge `json:"edges"`
+}
+
+// AutomationVersionNodeRef names a node a save added or removed.
+type AutomationVersionNodeRef struct {
+	ID    string  `json:"id"`
+	Kind  string  `json:"kind"`
+	Label *string `json:"label"`
+}
+
+// AutomationVersionAuthor is who saved a version.
+type AutomationVersionAuthor struct {
+	Name string `json:"name"`
+}
+
+// AutomationVersionSummary is one saved graph as the history lists it.
+type AutomationVersionSummary struct {
+	Version      int                        `json:"version"`
+	Note         *string                    `json:"note"`
+	CreatedBy    *AutomationVersionAuthor   `json:"created_by"`
+	CreatedAt    Time                       `json:"created_at"`
+	NodeCount    int                        `json:"node_count"`
+	NodesAdded   []AutomationVersionNodeRef `json:"nodes_added"`
+	NodesRemoved []AutomationVersionNodeRef `json:"nodes_removed"`
+}
+
+// AutomationVersionPageMeta pages the version history.
+type AutomationVersionPageMeta struct {
+	Page    int `json:"page"`
+	PerPage int `json:"per_page"`
+	Total   int `json:"total"`
+	// TotalPages is at least 1, so an empty history is one empty page.
+	TotalPages int `json:"total_pages"`
+}
+
+// AutomationVersionList is one page of the version history.
+type AutomationVersionList struct {
+	Data []AutomationVersionSummary `json:"data"`
+	Meta AutomationVersionPageMeta  `json:"meta"`
+}
+
+// AutomationVersion is one saved graph in full.
+type AutomationVersion struct {
+	Version   int                      `json:"version"`
+	Note      *string                  `json:"note"`
+	CreatedBy *AutomationVersionAuthor `json:"created_by"`
+	CreatedAt Time                     `json:"created_at"`
+	Graph     WorkflowGraph            `json:"graph"`
+}
+
+// AutomationVersionStep is one step compiled from a restored graph.
+type AutomationVersionStep struct {
+	Position     int            `json:"position"`
+	NodeID       string         `json:"node_id"`
+	ActionType   string         `json:"action_type"`
+	ActionConfig map[string]any `json:"action_config"`
+}
+
+// RestoredAutomationVersion is the new version RestoreVersion saved.
+type RestoredAutomationVersion struct {
+	// Version is the new version number.
+	Version int                     `json:"version"`
+	Graph   WorkflowGraph           `json:"graph"`
+	Steps   []AutomationVersionStep `json:"steps"`
+}
+
+// ListVersions returns every saved graph, newest first. Zero page or perPage
+// leaves the API's defaults in place.
+func (s *AutomationsService) ListVersions(ctx context.Context, id string, page, perPage int) (*AutomationVersionList, error) {
+	q := newQuery()
+	q.num("page", page)
+	q.num("per_page", perPage)
+	out := &AutomationVersionList{}
+	if err := s.client.Do(ctx, "GET", "/automations/"+url.PathEscape(id)+"/versions", nil, q.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetVersion returns one saved graph.
+func (s *AutomationsService) GetVersion(ctx context.Context, id string, version int) (*AutomationVersion, error) {
+	path := "/automations/" + url.PathEscape(id) + "/versions/" + strconv.Itoa(version)
+	out := &AutomationVersion{}
+	if err := s.client.json(ctx, "GET", path, nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// RestoreVersion saves that version's graph as a new version on top of the
+// history; nothing is rewritten.
+func (s *AutomationsService) RestoreVersion(ctx context.Context, id string, version int) (*RestoredAutomationVersion, error) {
+	path := "/automations/" + url.PathEscape(id) + "/versions/" + strconv.Itoa(version) + "/restore"
+	out := &RestoredAutomationVersion{}
+	if err := s.client.json(ctx, "POST", path, nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AutomationStats is the roll-up behind the automations dashboard.
 type AutomationStats struct {
 	TotalAutomations  int            `json:"totalAutomations"`
