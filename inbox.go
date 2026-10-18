@@ -116,6 +116,9 @@ type InboxItem struct {
 	CanReply bool `json:"canReply"`
 	Hidden   bool `json:"hidden"`
 	Liked    bool `json:"liked"`
+	// Reposted and Bookmarked are the account's own state on X.
+	Reposted   bool `json:"reposted"`
+	Bookmarked bool `json:"bookmarked"`
 	// Vote is how the account voted where the network ranks by votes: "up",
 	// "down" or empty.
 	Vote   string `json:"vote"`
@@ -127,6 +130,9 @@ type InboxItem struct {
 	// CanDelete covers a comment someone left and our own reply.
 	CanDelete bool `json:"canDelete"`
 	CanLike   bool `json:"canLike"`
+	// CanRepost and CanBookmark are true where the network has them (X).
+	CanRepost   bool `json:"can_repost"`
+	CanBookmark bool `json:"can_bookmark"`
 	// CanVote reports that the network ranks by votes, so a down vote exists.
 	CanVote bool `json:"canVote"`
 	// CanPin and CanEdit apply to our own comment only.
@@ -603,6 +609,29 @@ func (s *InboxService) Vote(ctx context.Context, id, direction string) (*InboxIt
 // Unlike removes our like. Also needs the `publish` scope.
 func (s *InboxService) Unlike(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unlike", nil)
+}
+
+// Repost reposts an item to the account's own timeline where CanRepost is
+// true (X). Also needs the `publish` scope. A 402 with code
+// "platform_balance_spent" means X's own pay-per-use balance is empty.
+func (s *InboxService) Repost(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "repost", nil)
+}
+
+// Unrepost takes our repost back. Also needs the `publish` scope.
+func (s *InboxService) Unrepost(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "unrepost", nil)
+}
+
+// Bookmark bookmarks an item on the account where CanBookmark is true (X).
+// Also needs the `publish` scope.
+func (s *InboxService) Bookmark(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "bookmark", nil)
+}
+
+// Unbookmark removes our bookmark. Also needs the `publish` scope.
+func (s *InboxService) Unbookmark(ctx context.Context, id string) (*InboxItem, error) {
+	return s.action(ctx, id, "unbookmark", nil)
 }
 
 // Pin pins our own comment. Also needs the `publish` scope.
