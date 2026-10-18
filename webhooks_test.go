@@ -46,7 +46,7 @@ func TestVerifyWebhookAcceptsATimestampedSignature(t *testing.T) {
 	if err := envelope.Decode(&article); err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if article.ID != "art_1" || article.PublishedURL != "https://yourbrand.com/blog/trail-shoes" || *article.Images[0].Position != 1 || *article.Keyword != "trail shoes" {
+	if article.ID != "art_1" || article.PublishedURL != "https://yourbrand.com/blog/trail-shoes" || *article.Images[0].Position != 1 || article.Images[0].MediaID != "m_2" || *article.Keyword != "trail shoes" {
 		t.Fatalf("article = %+v", article)
 	}
 }

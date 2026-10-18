@@ -386,7 +386,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `GoogleBusiness` | `GetLocation`, `UpdateLocation`, `GetAttributes`, `UpdateAttributes`, `GetMenus`, `ReplaceMenus`, `GetServices`, `ReplaceServices`, `ListMedia`, `AddMedia`, `DeleteMedia`, `ListPlaceActions`, `CreatePlaceAction`, `UpdatePlaceAction`, `DeletePlaceAction`, `GetVerificationOptions`, `StartVerification`, `CompleteVerification`, `GetPerformance`, `GetSearchKeywords`, `Assign` |
 | `Validate`    | `Post`, `Length`, `Media`                                                                                                                                         |
 | `Activity`    | `List`                                                                                                                                                            |
-| `Blog`        | `GetSettings`, `UpdateSettings`, `RotateWebsiteSecret`, `TestWebsite`, `ListKeywords`, `PlanKeywords`, `AddKeyword`, `UpdateKeyword`, `DeleteKeyword`, `ListArticles`, `RequestArticle`, `GetArticle`, `UpdateArticle`, `RegenerateArticle`, `PublishArticle`, `RejectArticle`, `DeleteArticle` |
+| `Blog`        | `GetSettings`, `UpdateSettings`, `RotateWebsiteSecret`, `TestWebsite`, `ListKeywords`, `SuggestSeeds`, `PlanKeywords`, `AddKeyword`, `UpdateKeyword`, `DeleteKeyword`, `ListArticles`, `RequestArticle`, `GetArticle`, `UpdateArticle`, `RegenerateArticle`, `SubmitArticle`, `PublishArticle`, `RejectArticle`, `DeleteArticle` |
 
 `Activity.List` reads what happened in a workspace, newest first.
 `ActivityKindSecurity` is the audit log: members joining, leaving or changing
@@ -460,10 +460,16 @@ _, err = client.Sequences.Unenroll(ctx, sequence.ID, []string{contactID})
 ## Blog
 
 `Blog` plans keywords, writes articles and publishes them to a website. A post
-goes to a social network; an article goes to a website. Reads and settings need
-`posts`; `PlanKeywords`, `RequestArticle` and `RegenerateArticle` spend credits
-and need `ai` (an empty balance is a `402`, see `UpgradeURL`); `PublishArticle`
-needs `publish` and answers `409` `no_target` until the settings name a target.
+goes to a social network; an article goes to a website. Reads, settings and
+`SubmitArticle` need `posts`; `SuggestSeeds`, `PlanKeywords`, `RequestArticle` and
+`RegenerateArticle` spend credits and need `ai` (an empty balance is a `402`, see
+`UpgradeURL`); `PublishArticle` needs `publish` and answers `409` `no_target` until
+the settings name a target.
+
+`PlanKeywords` lands its results as `suggested` keywords; setting a keyword's
+status to `planned` picks it and gives it the next free date. A written article is
+a `draft` until `SubmitArticle` moves it to `in_review`; only then do
+`PublishArticle` and `PublishAt` accept it.
 
 ```go
 article, err := client.Blog.RequestArticle(ctx, workspaceID, &fopost.RequestBlogArticleRequest{
@@ -471,6 +477,8 @@ article, err := client.Blog.RequestArticle(ctx, workspaceID, &fopost.RequestBlog
     Instructions: "Compare three models and close with a buying checklist",
 })
 // article.Status is "queued"; poll client.Blog.GetArticle until it is "draft".
+_, err = client.Blog.SubmitArticle(ctx, workspaceID, article.ID)
+// article.Status is now "in_review"; PublishArticle approves it.
 ```
 
 With `TargetKind` set to `fopost.BlogTargetWebsite` and a `WebsiteURL`, every
