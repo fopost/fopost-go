@@ -142,6 +142,7 @@ const (
 	PostStatusPartiallyFailed = "partially_failed"
 	PostStatusFailed          = "failed"
 	PostStatusCancelled       = "cancelled"
+	PostStatusUnpublished     = "unpublished"
 )
 
 // Delivery statuses, one per account on a post.

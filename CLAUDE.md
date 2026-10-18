@@ -5,10 +5,10 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 ## What This Is
 
 Go module `github.com/fopost/fopost-go` — the official Go client for the FoPost REST API
-(`fopost.com`). `fopost.Version` is `0.3.0`. It wraps the API's HTTP surface in services
+(`fopost.com`). `fopost.Version` is `0.4.0`. It wraps the API's HTTP surface in services
 hung off `*Client`: `Posts`, `Workspaces`, `Accounts`, `Communities`, `Labels`, `Webhooks`,
 `Analytics`, `Automations`, `Media`, `Inbox`, `Contacts`, `Broadcasts`, `Sequences`, `Ads`,
-`Validate`.
+`Validate`, `Queue`, `ConnectSessions`, `Logs`.
 
 `go 1.22` minimum (the code uses the `min` builtin, so 1.21+ is required regardless).
 **Standard library only** — `go.mod` has no `require` block.
@@ -49,7 +49,7 @@ One flat package `fopost` at the repository root, one file per API group:
 | `errors.go` | `*Error`, `RateLimit`, `APIError`/`StatusOf`/`CodeOf`, `Is*` predicates |
 | `types.go` | `Time`, `PageMeta`, `ContentBlock`, `Text`/`Thread`, `queryBuilder`, `Bool`/`String`/`Int` |
 | `multipart.go` | `buildMultipart` — buffered media upload and CSV bulk import bodies; `streamMultipart` — the piped form a post with files sends |
-| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `contacts.go` `broadcasts.go` `ads.go` `validate.go` | one `*Service` each, with its request/response types |
+| `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `contacts.go` `broadcasts.go` `ads.go` `validate.go` `queue.go` `connect_sessions.go` `logs.go` | one `*Service` each, with its request/response types |
 | `x.go` | X engagement beyond the inbox: `Accounts.FollowXUser`/`UnfollowXUser`, `Inbox.GetXPost`/`SearchXPosts` and their types |
 | `internal/version/main.go` | prints `fopost.Version` so the release workflow can check it against the tag |
 

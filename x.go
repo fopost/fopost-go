@@ -77,12 +77,14 @@ type XPostList struct {
 // id; anything else is a 400. Needs the `inbox` and `publish` scopes. A 402
 // with code "platform_balance_spent" means X's own pay-per-use balance is
 // empty.
+// Wraps the API's `followXUser` operation.
 func (s *AccountsService) FollowXUser(ctx context.Context, id, userID string) (*XFollowResult, error) {
 	return s.xFollow(ctx, id, "follow", userID)
 }
 
 // UnfollowXUser unfollows an X user as the account. Needs the `inbox` and
 // `publish` scopes.
+// Wraps the API's `unfollowXUser` operation.
 func (s *AccountsService) UnfollowXUser(ctx context.Context, id, userID string) (*XFollowResult, error) {
 	return s.xFollow(ctx, id, "unfollow", userID)
 }
@@ -99,6 +101,7 @@ func (s *AccountsService) xFollow(ctx context.Context, id, action, userID string
 
 // GetXPost reads one X post by its numeric id with the token of accountID.
 // A 404 means X has no such post. Needs the `inbox` scope.
+// Wraps the API's `getXPost` operation.
 func (s *InboxService) GetXPost(ctx context.Context, postID, accountID string) (*XPost, error) {
 	out := &XPost{}
 	query := newQuery()
@@ -112,6 +115,7 @@ func (s *InboxService) GetXPost(ctx context.Context, postID, accountID string) (
 
 // SearchXPosts runs a recent search on X with the token of params.AccountID.
 // Needs the `inbox` scope.
+// Wraps the API's `searchXPosts` operation.
 func (s *InboxService) SearchXPosts(ctx context.Context, params *XSearchParams) (*XPostList, error) {
 	out := &XPostList{}
 	if err := s.client.Do(ctx, "GET", "/x/search", nil, params.values(), out); err != nil {

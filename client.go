@@ -35,7 +35,7 @@ const (
 	// DefaultMaxRetries counts total attempts, so 3 means two retries.
 	DefaultMaxRetries = 3
 	// Version is the SDK version, reported in the User-Agent.
-	Version = "0.3.0"
+	Version = "0.4.0"
 
 	maxRetryWait  = 60 * time.Second
 	baseRetryWait = 500 * time.Millisecond
@@ -69,6 +69,10 @@ type Client struct {
 	Validate      *ValidateService
 	WhatsApp      *WhatsAppService
 	Activity      *ActivityService
+	Queue         *QueueService
+	Logs          *LogsService
+
+	ConnectSessions *ConnectSessionsService
 
 	GoogleBusiness *GoogleBusinessService
 	Blog           *BlogService
@@ -160,6 +164,9 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Communities = &CommunitiesService{client: c}
 	c.Labels = &LabelsService{client: c}
 	c.Activity = &ActivityService{client: c}
+	c.Queue = &QueueService{client: c}
+	c.Logs = &LogsService{client: c}
+	c.ConnectSessions = &ConnectSessionsService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}
@@ -196,6 +203,8 @@ type request struct {
 	streamLength int64
 	// unwrap peels a {"data": ...} envelope off the response before decoding.
 	unwrap bool
+	// headers are per-call extras such as Idempotency-Key.
+	headers http.Header
 }
 
 // Do sends an authenticated request to an endpoint the SDK does not wrap yet
@@ -217,7 +226,11 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, query ur
 }
 
 func (c *Client) json(ctx context.Context, method, path string, body any, query url.Values, out any) error {
-	req := &request{method: method, path: path, query: query, unwrap: true}
+	return c.jsonWithHeaders(ctx, method, path, body, query, nil, out)
+}
+
+func (c *Client) jsonWithHeaders(ctx context.Context, method, path string, body any, query url.Values, headers http.Header, out any) error {
+	req := &request{method: method, path: path, query: query, unwrap: true, headers: headers}
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
@@ -252,6 +265,11 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 		httpReq.Header.Set("User-Agent", c.userAgent)
 		if req.contentType != "" {
 			httpReq.Header.Set("Content-Type", req.contentType)
+		}
+		for name, values := range req.headers {
+			for _, v := range values {
+				httpReq.Header.Add(name, v)
+			}
 		}
 
 		res, err := c.httpClient.Do(httpReq)

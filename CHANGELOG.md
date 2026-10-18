@@ -4,10 +4,24 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 ## Unreleased
 
+- `Ads.SendConversions(ctx, idempotencyKey, body)` sends conversions against a pixel exactly once (`POST /ads/conversions/events`, `Idempotency-Key` required) and answers a `ConversionUploadResult` (`ID`, `Accepted`, `EventCount`, `Replayed`). `Ads.ListConversionEvents` reads the stored `ConversionBatch` rows with their hashed events. The LinkedIn rule method keeps the `SendConversionEvents` name.
+- `ConversionEvent` gains `EventID`, `ActionSource` (`ConversionActionSource*`), `SourceURL`, `ExternalID`, `ClientIPAddress`, `ClientUserAgent`, `ClickID`, `BrowserID` and `ContentIDs`. `Ads.UploadConversions` keeps returning the accepted count.
+- Pixels: `Ads.ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats` and `GetEventMatchQuality`, with `AdPixelDetail`, `AdPixelStats`, `EventMatchQuality` and the `PixelDataUse*` constants.
+- Custom conversions: `Ads.ListCustomConversions`, `CreateCustomConversion`, `GetCustomConversion`, `UpdateCustomConversion` and `DeleteCustomConversion`, with `CustomConversion`, `CustomConversionRule` and the `CustomConversion*` event type constants.
 - X engagement: `Inbox.Repost`, `Inbox.Unrepost`, `Inbox.Bookmark` and `Inbox.Unbookmark` (`POST /inbox/{id}/repost|unrepost|bookmark|unbookmark`, need `inbox` and `publish`), with `Reposted`, `Bookmarked`, `CanRepost` and `CanBookmark` on `InboxItem`.
 - `Accounts.FollowXUser` and `Accounts.UnfollowXUser` follow an X user by numeric id as the account (`POST /accounts/{id}/x/follow|unfollow`), answering an `XFollowResult`.
 - `Inbox.GetXPost` and `Inbox.SearchXPosts` read X posts with a connected account's token (`GET /x/posts/{id}`, `GET /x/search`), with the `XPost`, `XSearchParams`, `XSearchMeta` and `XPostList` types; search pages through `Meta.NextToken`.
 - Existing X accounts must be reconnected for repost, bookmark and follow: the grant now asks for the bookmark and follow permissions, and an older token answers `409` `reconnect_required`. Every one of these calls is an X API call metered to the workspace; a spent X balance is a `402` `platform_balance_spent`.
+
+## 0.4.0 - 2026-10-18
+
+- `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
+- `Posts.Unpublish` takes a live post down on every network (`POST /posts/{id}/unpublish`, needs `publish`), answering `UnpublishResult`; `PostStatusUnpublished`.
+- `ConnectSessions` service for hosted connect links: `Create` and `Get`, with `ConnectSession` and the `ConnectSession*` status constants.
+- `Webhooks.ListDeliveries`, `Webhooks.GetDelivery` and `Webhooks.Redeliver` read and replay the delivery log, with the `WebhookDelivery` type.
+- `Automations.ListVersions`, `Automations.GetVersion` and `Automations.RestoreVersion` walk and restore an automation's saved graphs, with `AutomationVersion`, `AutomationVersionSummary`, `RestoredAutomationVersion`, `WorkflowGraph`, `WorkflowNode` and `WorkflowEdge`.
+- `Logs` service: `List` reads recent API activity with its summary and cursor (`GET /logs`, needs `workspaces`).
+- `Analytics.Inbox` reads the inbox roll-up (`GET /analytics/inbox`).
 
 ## 0.3.0 - 2026-10-18
 

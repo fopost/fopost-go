@@ -1,12 +1,15 @@
 package fopost
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,5 +106,52 @@ func TestVerifyWebhookFallsBackToTheBodySignature(t *testing.T) {
 	}
 	if _, err := VerifyWebhook(webhookTestBody, http.Header{}, webhookTestSecret); !errors.Is(err, ErrWebhookSignature) {
 		t.Fatalf("expected ErrWebhookSignature without headers, got %v", err)
+	}
+}
+
+func TestWebhookDeliveriesRoundTrip(t *testing.T) {
+	var method, path, query string
+	var status int
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		switch {
+		case r.Method == "POST":
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/deliveries"):
+			_, _ = io.WriteString(w, `{"data":[{"id":"del_1","webhook_id":"wh_1","event":"post.published","delivery_key":"dk_1","attempt":2,"status":"failed","response_status":502,"response_snippet":"bad gateway","duration_ms":120,"payload_hash":"abc","next_retry_at":"2026-10-18T09:05:00.000Z","created_at":"2026-10-18T09:00:00.000Z"}]}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":{"id":"del_1","webhook_id":"wh_1","event":"post.published","delivery_key":"dk_1","attempt":2,"status":"success","response_status":200,"response_snippet":null,"duration_ms":80,"payload_hash":"abc","next_retry_at":null,"created_at":"2026-10-18T09:00:00.000Z"}}`)
+		}
+		status = http.StatusOK
+	})
+	ctx := context.Background()
+
+	deliveries, err := client.Webhooks.ListDeliveries(ctx, "wh_1", &ListWebhookDeliveriesParams{Status: "failed", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListDeliveries: %v", err)
+	}
+	if method != "GET" || path != "/webhooks/wh_1/deliveries" || query != "limit=10&status=failed" {
+		t.Fatalf("ListDeliveries sent %s %s?%s", method, path, query)
+	}
+	if len(deliveries) != 1 || deliveries[0].Attempt != 2 || *deliveries[0].ResponseStatus != 502 || *deliveries[0].ResponseSnippet != "bad gateway" || deliveries[0].NextRetryAt.IsZero() {
+		t.Fatalf("deliveries = %+v", deliveries)
+	}
+
+	delivery, err := client.Webhooks.GetDelivery(ctx, "wh_1", "del_1")
+	if err != nil {
+		t.Fatalf("GetDelivery: %v", err)
+	}
+	if method != "GET" || path != "/webhooks/wh_1/deliveries/del_1" {
+		t.Fatalf("GetDelivery sent %s %s", method, path)
+	}
+	if delivery.Status != "success" || delivery.ResponseSnippet != nil || !delivery.NextRetryAt.IsZero() {
+		t.Fatalf("delivery = %+v", delivery)
+	}
+
+	if err := client.Webhooks.Redeliver(ctx, "wh_1", "del_1"); err != nil {
+		t.Fatalf("Redeliver: %v", err)
+	}
+	if method != "POST" || path != "/webhooks/wh_1/deliveries/del_1/redeliver" || status != http.StatusOK {
+		t.Fatalf("Redeliver sent %s %s", method, path)
 	}
 }

@@ -147,3 +147,21 @@ func TestAnalyticsNativePostsKeepsTheMetaEnvelope(t *testing.T) {
 		t.Fatalf("metrics = %+v", list.Data[0].Metrics)
 	}
 }
+
+func TestAnalyticsInboxSendsItsOwnQuery(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"totals":{"received":12,"sent":9,"answered":8,"open":4,"conversations":5,"median_response_minutes":42.5},"deltas":{"received":10,"sent":null,"answered":-5},"series":[{"date":"2026-10-18","received":2,"sent":1,"answered":1}],"by_platform":[{"platform":"linkedin","received":12,"sent":9}],"by_type":[{"type":"dm","count":7}],"by_account":[{"account_id":"acc_1","platform":"linkedin","username":"yourbrand","name":"Your Brand","avatar":null,"received":12,"sent":9}],"response_time":[{"bucket":"under_1h","count":6}],"heatmap":[{"weekday":1,"hour":9,"count":3}],"time_zone":"UTC"}}`)
+	})
+	analytics, err := client.Analytics.Inbox(context.Background(), &InboxAnalyticsParams{WorkspaceID: "ws_1", Days: 30, TZ: "Europe/Zagreb"})
+	if err != nil {
+		t.Fatalf("Analytics.Inbox: %v", err)
+	}
+	if path != "/analytics/inbox" || query != "days=30&tz=Europe%2FZagreb&workspace_id=ws_1" {
+		t.Fatalf("sent %s?%s", path, query)
+	}
+	if *analytics.Totals.MedianResponseMinutes != 42.5 || analytics.Deltas.Sent != nil || *analytics.Deltas.Answered != -5 || analytics.ByAccount[0].Avatar != nil || analytics.Heatmap[0].Hour != 9 {
+		t.Fatalf("analytics = %+v", analytics)
+	}
+}

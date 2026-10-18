@@ -594,6 +594,7 @@ func (s *InboxService) action(ctx context.Context, id, action string, body any) 
 
 // Like likes an item: an upvote on Reddit, a favourite on Mastodon. Also needs
 // the `publish` scope.
+// Wraps the API's `likeInboxItem` operation.
 func (s *InboxService) Like(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "like", nil)
 }
@@ -602,11 +603,13 @@ func (s *InboxService) Like(ctx context.Context, id string) (*InboxItem, error) 
 // direction is "up", "down", or "none" to take an earlier vote back. An upvote
 // is the same call Like makes, so Liked moves with it. Also needs the
 // `publish` scope.
+// Wraps the API's `voteInboxItem` operation.
 func (s *InboxService) Vote(ctx context.Context, id, direction string) (*InboxItem, error) {
 	return s.action(ctx, id, "vote", map[string]string{"direction": direction})
 }
 
 // Unlike removes our like. Also needs the `publish` scope.
+// Wraps the API's `unlikeInboxItem` operation.
 func (s *InboxService) Unlike(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unlike", nil)
 }
@@ -614,22 +617,26 @@ func (s *InboxService) Unlike(ctx context.Context, id string) (*InboxItem, error
 // Repost reposts an item to the account's own timeline where CanRepost is
 // true (X). Also needs the `publish` scope. A 402 with code
 // "platform_balance_spent" means X's own pay-per-use balance is empty.
+// Wraps the API's `repostInboxItem` operation.
 func (s *InboxService) Repost(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "repost", nil)
 }
 
 // Unrepost takes our repost back. Also needs the `publish` scope.
+// Wraps the API's `unrepostInboxItem` operation.
 func (s *InboxService) Unrepost(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unrepost", nil)
 }
 
 // Bookmark bookmarks an item on the account where CanBookmark is true (X).
 // Also needs the `publish` scope.
+// Wraps the API's `bookmarkInboxItem` operation.
 func (s *InboxService) Bookmark(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "bookmark", nil)
 }
 
 // Unbookmark removes our bookmark. Also needs the `publish` scope.
+// Wraps the API's `unbookmarkInboxItem` operation.
 func (s *InboxService) Unbookmark(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unbookmark", nil)
 }
@@ -640,12 +647,14 @@ func (s *InboxService) Pin(ctx context.Context, id string) (*InboxItem, error) {
 }
 
 // Unpin unpins our own comment. Also needs the `publish` scope.
+// Wraps the API's `unpinInboxItem` operation.
 func (s *InboxService) Unpin(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unpin", nil)
 }
 
 // React reacts to a DM with an emoji; a nil reaction removes ours. Also needs
 // the `publish` scope.
+// Wraps the API's `reactToInboxItem` operation.
 func (s *InboxService) React(ctx context.Context, id string, reaction *string) (*InboxItem, error) {
 	body := struct {
 		Reaction *string `json:"reaction"`

@@ -1472,3 +1472,52 @@ func TestXSpentBalanceIsPaymentRequired(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestAutomationVersionsRoundTrip(t *testing.T) {
+	var method, path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		switch {
+		case r.Method == "POST":
+			_, _ = io.WriteString(w, `{"data":{"version":4,"graph":{"nodes":[{"id":"n1","kind":"trigger","label":null,"config":{},"position":0,"layout":{"x":10,"y":20}}],"edges":[]},"steps":[{"position":1,"node_id":"n2","action_type":"publish","action_config":{"accounts":["acc_1"]}}]}}`)
+		case strings.HasSuffix(r.URL.Path, "/versions"):
+			_, _ = io.WriteString(w, `{"data":[{"version":3,"note":"added delay","created_by":{"name":"Editor"},"created_at":"2026-10-18T09:00:00.000Z","node_count":3,"nodes_added":[{"id":"n3","kind":"delay","label":null}],"nodes_removed":[]}],"meta":{"page":1,"per_page":30,"total":3,"total_pages":1}}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":{"version":2,"note":null,"created_by":null,"created_at":"2026-10-17T09:00:00.000Z","graph":{"nodes":[{"id":"n1","kind":"trigger","label":"Start","config":{"source":"rss"},"position":0,"layout":null}],"edges":[{"id":"e1","source":"n1","source_handle":null,"target":"n2"}]}}}`)
+		}
+	})
+	ctx := context.Background()
+
+	versions, err := client.Automations.ListVersions(ctx, "auto_1", 1, 30)
+	if err != nil {
+		t.Fatalf("ListVersions: %v", err)
+	}
+	if method != "GET" || path != "/automations/auto_1/versions" || query != "page=1&per_page=30" {
+		t.Fatalf("ListVersions sent %s %s?%s", method, path, query)
+	}
+	if len(versions.Data) != 1 || versions.Data[0].Version != 3 || versions.Data[0].CreatedBy.Name != "Editor" || versions.Data[0].NodesAdded[0].Kind != "delay" || versions.Meta.TotalPages != 1 {
+		t.Fatalf("versions = %+v", versions)
+	}
+
+	version, err := client.Automations.GetVersion(ctx, "auto_1", 2)
+	if err != nil {
+		t.Fatalf("GetVersion: %v", err)
+	}
+	if method != "GET" || path != "/automations/auto_1/versions/2" {
+		t.Fatalf("GetVersion sent %s %s", method, path)
+	}
+	if version.Version != 2 || version.CreatedBy != nil || *version.Graph.Nodes[0].Label != "Start" || version.Graph.Nodes[0].Config["source"] != "rss" || version.Graph.Edges[0].Target != "n2" {
+		t.Fatalf("version = %+v", version)
+	}
+
+	restored, err := client.Automations.RestoreVersion(ctx, "auto_1", 2)
+	if err != nil {
+		t.Fatalf("RestoreVersion: %v", err)
+	}
+	if method != "POST" || path != "/automations/auto_1/versions/2/restore" {
+		t.Fatalf("RestoreVersion sent %s %s", method, path)
+	}
+	if restored.Version != 4 || restored.Graph.Nodes[0].Layout.Y != 20 || len(restored.Steps) != 1 || restored.Steps[0].ActionType != "publish" {
+		t.Fatalf("restored = %+v", restored)
+	}
+}
