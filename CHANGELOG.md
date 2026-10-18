@@ -2,7 +2,7 @@
 
 All notable changes to this module are documented here. Releases are tags on `main`.
 
-## Unreleased
+## 0.3.0 - 2026-10-18
 
 - **Breaking:** the `Blog` service now speaks the live API contract: `workspace_id` on the query string, snake_case response fields, and an unwrapped `UpdateSettings` response with `website_secret` beside the settings. Request bodies are unchanged. `BlogWebsiteTest` is now `{HTTPStatus}`; a website that refuses the test is a `502` `*Error` whose `http_status` field holds its answer.
 - **Breaking:** `BlogSettings.AutoPublish` and `UpdateBlogSettingsRequest.AutoPublish` are removed; the API no longer has the setting. Every article now goes through review.
@@ -12,6 +12,7 @@ All notable changes to this module are documented here. Releases are tags on `ma
 - `BlogKeyword.FitReason` says why a keyword serves the blog goal. `PlanKeywords` no longer fills the calendar: setting a keyword to `planned` picks it.
 - `BlogArticleStatusInReview` and the `BlogGoal*` constants.
 
+- Reddit destinations: `Accounts.ListRedditSubreddits`, `Accounts.ListRedditSubredditRules`, `Accounts.ListRedditFlairs` and `Accounts.SetRedditDefaultSubreddit`, with `Validate.Subreddit` answering the same existence check before a post exists, and `Inbox.Vote(ctx, id, direction)` with `up`, `down` or `none` to take a vote back. A flair id is valid only in its own subreddit; `Account.ReconnectRequired` says a grant predates the subreddit scopes.
 - `Blog` service: blog settings (`GetSettings`, `UpdateSettings`, `RotateWebsiteSecret`, `TestWebsite`), keywords (`ListKeywords`, `PlanKeywords`, `AddKeyword`, `UpdateKeyword`, `DeleteKeyword`) and articles (`ListArticles`, `RequestArticle`, `GetArticle`, `UpdateArticle`, `RegenerateArticle`, `PublishArticle`, `RejectArticle`, `DeleteArticle`), with the `BlogSettings`, `BlogKeyword`, `BlogArticle`, `BlogArticleFull` and `BlogArticleImage` types and the `BlogArticleStatus*`, `BlogKeywordStatus*` and `BlogTarget*` constants.
 - `VerifyWebhook(rawBody, headers, secret)` checks a delivery's HMAC-SHA256 signature in constant time, preferring the timestamped `X-FoPost-Signature-256` within a 300 second tolerance and falling back to `X-FoPost-Signature`, and returns the `WebhookEnvelope`. `BlogArticlePublished` types the `article.published` payload; `EventArticlePublished` and `EventArticleTest` name the events.
 - `Media.Limits` reads `GET /media/limits`: the account's upload ceiling, the multipart per-file ceiling, the next tier and the allowed types.

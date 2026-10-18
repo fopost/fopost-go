@@ -387,6 +387,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Validate`    | `Post`, `Length`, `Media`, `Subreddit` |
 | `Activity`    | `List`                                                                                                                                                            |
 | `Blog`        | `GetSettings`, `UpdateSettings`, `RotateWebsiteSecret`, `TestWebsite`, `ListKeywords`, `SuggestSeeds`, `PlanKeywords`, `AddKeyword`, `UpdateKeyword`, `DeleteKeyword`, `ListArticles`, `RequestArticle`, `GetArticle`, `UpdateArticle`, `RegenerateArticle`, `SubmitArticle`, `PublishArticle`, `RejectArticle`, `DeleteArticle` |
+| `Blogs`       | `ListBlogs`, `ListArticles`, `GetArticle`, `CreateArticle`, `UpdateArticle`, `DeleteArticle`, `ListProducts`, `UpdateProduct`                            |
 
 `Activity.List` reads what happened in a workspace, newest first.
 `ActivityKindSecurity` is the audit log: members joining, leaving or changing
