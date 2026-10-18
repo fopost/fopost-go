@@ -2,6 +2,13 @@
 
 All notable changes to this module are documented here. Releases are tags on `main`.
 
+## Unreleased
+
+- `Ads.SendConversions(ctx, idempotencyKey, body)` sends conversions against a pixel exactly once (`POST /ads/conversions/events`, `Idempotency-Key` required) and answers a `ConversionUploadResult` (`ID`, `Accepted`, `EventCount`, `Replayed`). `Ads.ListConversionEvents` reads the stored `ConversionBatch` rows with their hashed events. The LinkedIn rule method keeps the `SendConversionEvents` name.
+- `ConversionEvent` gains `EventID`, `ActionSource` (`ConversionActionSource*`), `SourceURL`, `ExternalID`, `ClientIPAddress`, `ClientUserAgent`, `ClickID`, `BrowserID` and `ContentIDs`. `Ads.UploadConversions` keeps returning the accepted count.
+- Pixels: `Ads.ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats` and `GetEventMatchQuality`, with `AdPixelDetail`, `AdPixelStats`, `EventMatchQuality` and the `PixelDataUse*` constants.
+- Custom conversions: `Ads.ListCustomConversions`, `CreateCustomConversion`, `GetCustomConversion`, `UpdateCustomConversion` and `DeleteCustomConversion`, with `CustomConversion`, `CustomConversionRule` and the `CustomConversion*` event type constants.
+
 ## 0.3.0 - 2026-10-18
 
 - **Breaking:** the `Blog` service now speaks the live API contract: `workspace_id` on the query string, snake_case response fields, and an unwrapped `UpdateSettings` response with `website_secret` beside the settings. Request bodies are unchanged. `BlogWebsiteTest` is now `{HTTPStatus}`; a website that refuses the test is a `502` `*Error` whose `http_status` field holds its answer.
