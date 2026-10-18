@@ -203,6 +203,8 @@ type request struct {
 	streamLength int64
 	// unwrap peels a {"data": ...} envelope off the response before decoding.
 	unwrap bool
+	// headers are per-call extras such as Idempotency-Key.
+	headers http.Header
 }
 
 // Do sends an authenticated request to an endpoint the SDK does not wrap yet
@@ -224,7 +226,11 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, query ur
 }
 
 func (c *Client) json(ctx context.Context, method, path string, body any, query url.Values, out any) error {
-	req := &request{method: method, path: path, query: query, unwrap: true}
+	return c.jsonWithHeaders(ctx, method, path, body, query, nil, out)
+}
+
+func (c *Client) jsonWithHeaders(ctx context.Context, method, path string, body any, query url.Values, headers http.Header, out any) error {
+	req := &request{method: method, path: path, query: query, unwrap: true, headers: headers}
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
@@ -259,6 +265,11 @@ func (c *Client) do(ctx context.Context, req *request, out any) error {
 		httpReq.Header.Set("User-Agent", c.userAgent)
 		if req.contentType != "" {
 			httpReq.Header.Set("Content-Type", req.contentType)
+		}
+		for name, values := range req.headers {
+			for _, v := range values {
+				httpReq.Header.Add(name, v)
+			}
 		}
 
 		res, err := c.httpClient.Do(httpReq)

@@ -158,3 +158,81 @@ func TestAdsCommentsPageAndTheThreeWrites(t *testing.T) {
 		t.Fatalf("method = %q, path = %q, body = %+v", method, path, body)
 	}
 }
+
+func TestAdsSendConversionsCarriesTheIdempotencyKey(t *testing.T) {
+	var path, key string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, key = r.URL.Path, r.Header.Get("Idempotency-Key")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Idempotency-Replayed", "true")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = io.WriteString(w, `{"data":{"id":"cb_1","accepted":1,"eventCount":1,"replayed":true}}`)
+	})
+
+	result, err := client.Ads.SendConversions(context.Background(), "order-42", &UploadConversionsRequest{
+		WorkspaceID: "ws_1", ConnectionID: "conn_1", AdAccountID: "act_1", PixelID: "px_1",
+		Events: []ConversionEvent{{
+			EventName: "Purchase", OccurredAt: "2026-10-18T10:04:00Z", EventID: "evt_1",
+			ActionSource: ConversionActionSourceWebsite, Email: "buyer@example.test", ContentIDs: []string{"sku_1"},
+		}},
+	})
+	if err != nil || result.ID != "cb_1" || !result.Replayed || result.Accepted != 1 || result.EventCount != 1 {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	if path != "/ads/conversions/events" || key != "order-42" {
+		t.Fatalf("path = %s, Idempotency-Key = %q", path, key)
+	}
+	event := body["events"].([]any)[0].(map[string]any)
+	if event["eventId"] != "evt_1" || event["actionSource"] != "website" || event["email"] != "buyer@example.test" {
+		t.Fatalf("event = %+v", event)
+	}
+}
+
+func TestAdsPixelReadsUseTheRightPathAndQuery(t *testing.T) {
+	var path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.RawQuery
+		_, _ = io.WriteString(w, `{"data":{"id":"px_1","name":"Site","code":"<script></script>","createdAt":null,"lastFiredAt":"2026-10-17T00:00:00Z","isUnavailable":false,"dataUseSetting":"analytics_only"}}`)
+	})
+
+	pixel, err := client.Ads.GetPixel(context.Background(), "px_1", &PixelParams{
+		WorkspaceID: "ws_1", ConnectionID: "conn_1", AdAccountID: "act_1",
+	})
+	if err != nil || pixel.ID != "px_1" || pixel.Code == nil || *pixel.Code != "<script></script>" || pixel.CreatedAt != nil {
+		t.Fatalf("pixel = %+v, err = %v", pixel, err)
+	}
+	if pixel.DataUseSetting == nil || *pixel.DataUseSetting != PixelDataUseAnalyticsOnly {
+		t.Fatalf("dataUseSetting = %v", pixel.DataUseSetting)
+	}
+	if path != "/ads/pixels/px_1" || !strings.Contains(query, "ad_account_id=act_1") || !strings.Contains(query, "connection_id=conn_1") {
+		t.Fatalf("path = %s, query = %s", path, query)
+	}
+}
+
+func TestAdsCreateCustomConversionSendsTheRule(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"data":{"id":"cc_1","name":"Checkout","pixelId":"px_1","eventType":"PURCHASE","rule":{"eventName":"PageView","urlContains":"/thanks"},"description":null,"defaultValueMinor":1999,"isArchived":false,"isUnavailable":false,"createdAt":null,"lastFiredAt":null}}`)
+	})
+
+	cc, err := client.Ads.CreateCustomConversion(context.Background(), &CreateCustomConversionRequest{
+		WorkspaceID: "ws_1", ConnectionID: "conn_1", AdAccountID: "act_1", PixelID: "px_1",
+		Name: "Checkout", EventType: CustomConversionPurchase,
+		Rule: CustomConversionRule{URLContains: "/thanks"}, DefaultValueMinor: Int(1999),
+	})
+	if err != nil || cc.ID != "cc_1" || cc.Rule == nil || cc.Rule.URLContains != "/thanks" || cc.DefaultValueMinor == nil || *cc.DefaultValueMinor != 1999 {
+		t.Fatalf("cc = %+v, err = %v", cc, err)
+	}
+	if method != http.MethodPost || path != "/ads/custom-conversions" {
+		t.Fatalf("%s %s", method, path)
+	}
+	rule := body["rule"].(map[string]any)
+	if body["eventType"] != "PURCHASE" || rule["urlContains"] != "/thanks" || rule["eventName"] != nil {
+		t.Fatalf("body = %+v", body)
+	}
+}

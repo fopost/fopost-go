@@ -2,6 +2,13 @@
 
 All notable changes to this module are documented here. Releases are tags on `main`.
 
+## Unreleased
+
+- `Ads.SendConversions(ctx, idempotencyKey, body)` sends conversions against a pixel exactly once (`POST /ads/conversions/events`, `Idempotency-Key` required) and answers a `ConversionUploadResult` (`ID`, `Accepted`, `EventCount`, `Replayed`). `Ads.ListConversionEvents` reads the stored `ConversionBatch` rows with their hashed events. The LinkedIn rule method keeps the `SendConversionEvents` name.
+- `ConversionEvent` gains `EventID`, `ActionSource` (`ConversionActionSource*`), `SourceURL`, `ExternalID`, `ClientIPAddress`, `ClientUserAgent`, `ClickID`, `BrowserID` and `ContentIDs`. `Ads.UploadConversions` keeps returning the accepted count.
+- Pixels: `Ads.ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats` and `GetEventMatchQuality`, with `AdPixelDetail`, `AdPixelStats`, `EventMatchQuality` and the `PixelDataUse*` constants.
+- Custom conversions: `Ads.ListCustomConversions`, `CreateCustomConversion`, `GetCustomConversion`, `UpdateCustomConversion` and `DeleteCustomConversion`, with `CustomConversion`, `CustomConversionRule` and the `CustomConversion*` event type constants.
+
 ## 0.4.0 - 2026-10-18
 
 - `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.

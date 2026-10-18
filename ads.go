@@ -1556,18 +1556,33 @@ type AdCommentsPage struct {
 	NextCursor string      `json:"nextCursor"`
 }
 
-// ConversionEvent is one offline conversion. Email and Phone are hashed by the
-// API before anything leaves FoPost.
+// ConversionEvent is one offline conversion. Email, Phone and ExternalID are
+// hashed by the API before anything leaves FoPost and are never stored.
 type ConversionEvent struct {
 	EventName string `json:"eventName"`
 	// OccurredAt is ISO 8601.
 	OccurredAt string `json:"occurredAt"`
-	Email      string `json:"email,omitempty"`
-	Phone      string `json:"phone,omitempty"`
+	// EventID is your own id, so the network deduplicates a browser and server pair.
+	EventID string `json:"eventId,omitempty"`
+	// ActionSource is one of the ConversionActionSource* constants; `website` when empty.
+	ActionSource string `json:"actionSource,omitempty"`
+	// SourceURL is the page the event fired on.
+	SourceURL string `json:"sourceUrl,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	// ExternalID is your own user id.
+	ExternalID string `json:"externalId,omitempty"`
+	// ClientIPAddress and ClientUserAgent are sent as-is for matching, never stored.
+	ClientIPAddress string `json:"clientIpAddress,omitempty"`
+	ClientUserAgent string `json:"clientUserAgent,omitempty"`
+	// ClickID is the network's click id (`fbc`); BrowserID its browser id (`fbp`).
+	ClickID   string `json:"clickId,omitempty"`
+	BrowserID string `json:"browserId,omitempty"`
 	// ValueMinor is the account currency in minor units.
-	ValueMinor *int   `json:"valueMinor,omitempty"`
-	Currency   string `json:"currency,omitempty"`
-	OrderID    string `json:"orderId,omitempty"`
+	ValueMinor *int     `json:"valueMinor,omitempty"`
+	Currency   string   `json:"currency,omitempty"`
+	OrderID    string   `json:"orderId,omitempty"`
+	ContentIDs []string `json:"contentIds,omitempty"`
 }
 
 // UploadConversionsRequest is the body of UploadConversions.
@@ -1575,7 +1590,7 @@ type UploadConversionsRequest struct {
 	WorkspaceID  string `json:"workspaceId"`
 	ConnectionID string `json:"connectionId"`
 	AdAccountID  string `json:"adAccountId"`
-	// PixelID has to be a pixel the ad account owns, from Audiences.
+	// PixelID has to be a pixel the ad account owns, from Pixels.
 	PixelID string `json:"pixelId"`
 	// Events is up to 1000 per call.
 	Events []ConversionEvent `json:"events"`
