@@ -50,6 +50,7 @@ One flat package `fopost` at the repository root, one file per API group:
 | `types.go` | `Time`, `PageMeta`, `ContentBlock`, `Text`/`Thread`, `queryBuilder`, `Bool`/`String`/`Int` |
 | `multipart.go` | `buildMultipart` — buffered media upload and CSV bulk import bodies; `streamMultipart` — the piped form a post with files sends |
 | `posts.go` `accounts.go` `workspaces.go` `communities.go` `labels.go` `webhooks.go` `analytics.go` `automations.go` `media.go` `inbox.go` `contacts.go` `broadcasts.go` `ads.go` `validate.go` | one `*Service` each, with its request/response types |
+| `x.go` | X engagement beyond the inbox: `Accounts.FollowXUser`/`UnfollowXUser`, `Inbox.GetXPost`/`SearchXPosts` and their types |
 | `internal/version/main.go` | prints `fopost.Version` so the release workflow can check it against the tag |
 
 Request flow: a service method builds its query with `newQuery()` and its body as a struct
@@ -95,8 +96,10 @@ for concurrent use.
 - Scopes: one per service, named after it. `Validate` needs `posts`; `Inbox` needs `inbox`; `Ads` needs `ads`, and
   `Ads.Boost`/`Create`/`SetStatus`/`Delete`/`SetStatuses` and the create/update/delete/duplicate
   calls on campaigns, ad sets and network ads also need `publish` because they spend money.
-  `Inbox.EditComment`/`Like`/`Unlike`/`Pin`/`Unpin`/`React`/`StartConversation`/`SetTyping`,
+  `Inbox.EditComment`/`Like`/`Unlike`/`Repost`/`Unrepost`/`Bookmark`/`Unbookmark`/`Pin`/`Unpin`/`React`/`StartConversation`/`SetTyping`,
   `ReplyWith` carrying media or quick replies, and deleting our own reply also need `publish`.
+  `Accounts.FollowXUser`/`UnfollowXUser` need `inbox` and `publish`, not `accounts`;
+  `Inbox.GetXPost`/`SearchXPosts` need `inbox` and take the X account on the query string.
   A boost or ad starts paused unless `Paused` is `Bool(false)`. `/inbox/chat/*` (browser-
   encrypted X Chat) and the attachment stream `/inbox/{id}/attachments/{index}` are not
   wrapped; the SDK has no binary-download pattern.

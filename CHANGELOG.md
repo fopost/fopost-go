@@ -2,6 +2,13 @@
 
 All notable changes to this module are documented here. Releases are tags on `main`.
 
+## Unreleased
+
+- X engagement: `Inbox.Repost`, `Inbox.Unrepost`, `Inbox.Bookmark` and `Inbox.Unbookmark` (`POST /inbox/{id}/repost|unrepost|bookmark|unbookmark`, need `inbox` and `publish`), with `Reposted`, `Bookmarked`, `CanRepost` and `CanBookmark` on `InboxItem`.
+- `Accounts.FollowXUser` and `Accounts.UnfollowXUser` follow an X user by numeric id as the account (`POST /accounts/{id}/x/follow|unfollow`), answering an `XFollowResult`.
+- `Inbox.GetXPost` and `Inbox.SearchXPosts` read X posts with a connected account's token (`GET /x/posts/{id}`, `GET /x/search`), with the `XPost`, `XSearchParams`, `XSearchMeta` and `XPostList` types; search pages through `Meta.NextToken`.
+- Existing X accounts must be reconnected for repost, bookmark and follow: the grant now asks for the bookmark and follow permissions, and an older token answers `409` `reconnect_required`. Every one of these calls is an X API call metered to the workspace; a spent X balance is a `402` `platform_balance_spent`.
+
 ## 0.3.0 - 2026-10-18
 
 - **Breaking:** the `Blog` service now speaks the live API contract: `workspace_id` on the query string, snake_case response fields, and an unwrapped `UpdateSettings` response with `website_secret` beside the settings. Request bodies are unchanged. `BlogWebsiteTest` is now `{HTTPStatus}`; a website that refuses the test is a `502` `*Error` whose `http_status` field holds its answer.
