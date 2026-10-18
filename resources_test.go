@@ -1383,6 +1383,96 @@ func TestAccountsPlatformMetricsSurfacesAPendingGrant(t *testing.T) {
 	}
 }
 
+func TestInboxRepostAndBookmarkPostToTheirPaths(t *testing.T) {
+	var paths []string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		_, _ = io.WriteString(w, `{"data":{"id":"itm_1","platform":"twitter","reposted":true,"bookmarked":true,"can_repost":true,"can_bookmark":true}}`)
+	})
+
+	ctx := context.Background()
+	item, err := client.Inbox.Repost(ctx, "itm_1")
+	if err != nil || !item.Reposted || !item.CanRepost {
+		t.Fatalf("Inbox.Repost: %+v, %v", item, err)
+	}
+	if _, err := client.Inbox.Unrepost(ctx, "itm_1"); err != nil {
+		t.Fatalf("Inbox.Unrepost: %v", err)
+	}
+	if item, err = client.Inbox.Bookmark(ctx, "itm_1"); err != nil || !item.Bookmarked || !item.CanBookmark {
+		t.Fatalf("Inbox.Bookmark: %+v, %v", item, err)
+	}
+	if _, err := client.Inbox.Unbookmark(ctx, "itm_1"); err != nil {
+		t.Fatalf("Inbox.Unbookmark: %v", err)
+	}
+	want := "[POST /inbox/itm_1/repost POST /inbox/itm_1/unrepost POST /inbox/itm_1/bookmark POST /inbox/itm_1/unbookmark]"
+	if fmt.Sprint(paths) != want {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
+func TestXFollowRoutes(t *testing.T) {
+	var method, path, raw string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		following := strings.HasSuffix(r.URL.Path, "/follow")
+		_, _ = fmt.Fprintf(w, `{"data":{"account_id":"acc_1","user_id":"12345","following":%t}}`, following)
+	})
+	ctx := context.Background()
+
+	res, err := client.Accounts.FollowXUser(ctx, "acc_1", "12345")
+	if err != nil || method != "POST" || path != "/accounts/acc_1/x/follow" || raw != `{"user_id":"12345"}` || !res.Following || res.UserID != "12345" {
+		t.Fatalf("follow: %v %s %s %s %+v", err, method, path, raw, res)
+	}
+
+	res, err = client.Accounts.UnfollowXUser(ctx, "acc_1", "12345")
+	if err != nil || path != "/accounts/acc_1/x/unfollow" || raw != `{"user_id":"12345"}` || res.Following || res.AccountID != "acc_1" {
+		t.Fatalf("unfollow: %v %s %s %+v", err, path, raw, res)
+	}
+}
+
+func TestXPostLookupAndSearch(t *testing.T) {
+	var method, path, query string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
+		if r.URL.Path == "/x/search" {
+			_, _ = io.WriteString(w, `{"data":[{"id":"2","text":"hello","likes":3}],"meta":{"next_token":"tok_2"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":{"id":"1","text":"hi","permalink":"https://x.com/a/status/1","author_handle":"a","author_followers":10,"conversation_id":"1","parent_external_id":null,"likes":1,"replies":null,"reposts":2,"quotes":0,"platform_created_at":"2026-10-18T10:00:00.000Z"}}`)
+	})
+	ctx := context.Background()
+
+	post, err := client.Inbox.GetXPost(ctx, "1", "acc_1")
+	if err != nil || method != "GET" || path != "/x/posts/1" || query != "account_id=acc_1" {
+		t.Fatalf("lookup: %v %s %s %s", err, method, path, query)
+	}
+	if post.ID != "1" || *post.AuthorHandle != "a" || *post.Reposts != 2 || post.Replies != nil || post.ParentExternalID != nil || post.PlatformCreatedAt.IsZero() {
+		t.Fatalf("post = %+v", post)
+	}
+
+	page, err := client.Inbox.SearchXPosts(ctx, &XSearchParams{AccountID: "acc_1", Q: "fopost", MaxResults: 50, NextToken: "tok_1"})
+	if err != nil || path != "/x/search" || query != "account_id=acc_1&max_results=50&next_token=tok_1&q=fopost" {
+		t.Fatalf("search: %v %s %s", err, path, query)
+	}
+	if len(page.Data) != 1 || page.Data[0].ID != "2" || *page.Data[0].Likes != 3 || page.Meta.NextToken == nil || *page.Meta.NextToken != "tok_2" {
+		t.Fatalf("page = %+v", page)
+	}
+}
+
+func TestXSpentBalanceIsPaymentRequired(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = io.WriteString(w, `{"error":"platform_balance_spent","message":"X balance is spent"}`)
+	})
+
+	_, err := client.Inbox.Repost(context.Background(), "itm_1")
+	if !IsPaymentRequired(err) || CodeOf(err) != "platform_balance_spent" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestAutomationVersionsRoundTrip(t *testing.T) {
 	var method, path, query string
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
