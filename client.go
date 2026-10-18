@@ -69,6 +69,7 @@ type Client struct {
 	Validate      *ValidateService
 	WhatsApp      *WhatsAppService
 	Activity      *ActivityService
+	Queue         *QueueService
 
 	GoogleBusiness *GoogleBusinessService
 	Blog           *BlogService
@@ -160,6 +161,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Communities = &CommunitiesService{client: c}
 	c.Labels = &LabelsService{client: c}
 	c.Activity = &ActivityService{client: c}
+	c.Queue = &QueueService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}

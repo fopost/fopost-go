@@ -191,9 +191,12 @@ type CreatePostRequest struct {
 	ContentType string `json:"content_type,omitempty"`
 	// ArtifactType is "text_post", "thread", "article", "carousel",
 	// "short_video", or "link_share".
-	ArtifactType      string   `json:"artifact_type,omitempty"`
-	Status            string   `json:"status,omitempty"`
-	ScheduleAt        *Time    `json:"schedule_at,omitempty"`
+	ArtifactType string `json:"artifact_type,omitempty"`
+	Status       string `json:"status,omitempty"`
+	ScheduleAt   *Time  `json:"schedule_at,omitempty"`
+	// Schedule set to ScheduleQueue drops the post into the next free queue
+	// slot instead of ScheduleAt.
+	Schedule          string   `json:"schedule,omitempty"`
 	Repeatable        *bool    `json:"repeatable,omitempty"`
 	RepeatableTimes   *int     `json:"repeatable_times,omitempty"`
 	RepeatableGap     *int     `json:"repeatable_gap,omitempty"`
@@ -291,12 +294,14 @@ func (s *PostsService) Create(ctx context.Context, body *CreatePostRequest, file
 // UpdatePostRequest is the body of Update. Only the fields you set are sent,
 // so an update is a partial one.
 type UpdatePostRequest struct {
-	Accounts          []string       `json:"accounts,omitempty"`
-	Content           []ContentBlock `json:"content,omitempty"`
-	ContentType       string         `json:"content_type,omitempty"`
-	ArtifactType      string         `json:"artifact_type,omitempty"`
-	Status            string         `json:"status,omitempty"`
-	ScheduleAt        *Time          `json:"schedule_at,omitempty"`
+	Accounts     []string       `json:"accounts,omitempty"`
+	Content      []ContentBlock `json:"content,omitempty"`
+	ContentType  string         `json:"content_type,omitempty"`
+	ArtifactType string         `json:"artifact_type,omitempty"`
+	Status       string         `json:"status,omitempty"`
+	ScheduleAt   *Time          `json:"schedule_at,omitempty"`
+	// Schedule set to ScheduleQueue moves the post to the next free queue slot.
+	Schedule          string         `json:"schedule,omitempty"`
 	Repeatable        *bool          `json:"repeatable,omitempty"`
 	RepeatableTimes   *int           `json:"repeatable_times,omitempty"`
 	RepeatableGap     *int           `json:"repeatable_gap,omitempty"`
