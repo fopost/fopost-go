@@ -584,6 +584,31 @@ func (s *PostsService) Cancel(ctx context.Context, id string, opts *CancelOption
 	return out, nil
 }
 
+// UnpublishDelivery is one network the post was live on. Removed is false
+// when the network refused to take the post down.
+type UnpublishDelivery struct {
+	AccountID string `json:"account_id"`
+	Platform  string `json:"platform"`
+	Removed   bool   `json:"removed"`
+}
+
+// UnpublishResult is the post's status after Unpublish and what each network did.
+type UnpublishResult struct {
+	PostStatus string              `json:"post_status"`
+	Deliveries []UnpublishDelivery `json:"deliveries"`
+}
+
+// Unpublish deletes the post on every network it is live on; the post stays
+// as a record. A network that cannot delete a live post refuses the whole
+// call with a 409 carrying `unsupported_platforms`. Needs the `publish` scope.
+func (s *PostsService) Unpublish(ctx context.Context, id string) (*UnpublishResult, error) {
+	out := &UnpublishResult{}
+	if err := s.client.json(ctx, "POST", "/posts/"+url.PathEscape(id)+"/unpublish", nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PreflightResult lists per-account blockers and advisory content signals.
 type PreflightResult struct {
 	Ready bool `json:"ready"`

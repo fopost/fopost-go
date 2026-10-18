@@ -444,3 +444,21 @@ func TestPostsCreateRefusesTooManyFiles(t *testing.T) {
 		t.Fatal("expected an error with too many files")
 	}
 }
+
+func TestUnpublishDecodesEachNetwork(t *testing.T) {
+	var method, path string
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_, _ = io.WriteString(w, `{"data":{"post_status":"unpublished","deliveries":[{"account_id":"acc_1","platform":"linkedin","removed":true},{"account_id":"acc_2","platform":"threads","removed":false}]}}`)
+	})
+	result, err := client.Posts.Unpublish(context.Background(), "post_1")
+	if err != nil {
+		t.Fatalf("Unpublish: %v", err)
+	}
+	if method != "POST" || path != "/posts/post_1/unpublish" {
+		t.Fatalf("sent %s %s", method, path)
+	}
+	if result.PostStatus != PostStatusUnpublished || len(result.Deliveries) != 2 || result.Deliveries[0].Removed != true || result.Deliveries[1].Removed != false {
+		t.Fatalf("result = %+v", result)
+	}
+}
