@@ -56,37 +56,37 @@ const (
 
 // BlogSettings is a workspace's blog configuration.
 type BlogSettings struct {
-	SiteURL  *string `json:"siteUrl"`
+	SiteURL  *string `json:"site_url"`
 	Topic    *string `json:"topic"`
 	Audience *string `json:"audience"`
 	// Goal is one of the BlogGoal constants, or nil when unset.
 	Goal           *string `json:"goal"`
-	FocusTopics    *string `json:"focusTopics"`
-	AvoidTopics    *string `json:"avoidTopics"`
+	FocusTopics    *string `json:"focus_topics"`
+	AvoidTopics    *string `json:"avoid_topics"`
 	Language       string  `json:"language"`
-	LocationCode   int     `json:"locationCode"`
-	CadencePerWeek int     `json:"cadencePerWeek"`
+	LocationCode   int     `json:"location_code"`
+	CadencePerWeek int     `json:"cadence_per_week"`
 	// ReviewHoldDays is how many days before its planned date a picked
 	// keyword starts being written.
-	ReviewHoldDays int     `json:"reviewHoldDays"`
-	ImageTier      string  `json:"imageTier"`
-	InBodyImages   int     `json:"inBodyImages"`
-	MinWords       int     `json:"minWords"`
-	MaxWords       int     `json:"maxWords"`
-	BrandVoiceID   *string `json:"brandVoiceId"`
+	ReviewHoldDays int     `json:"review_hold_days"`
+	ImageTier      string  `json:"image_tier"`
+	InBodyImages   int     `json:"in_body_images"`
+	MinWords       int     `json:"min_words"`
+	MaxWords       int     `json:"max_words"`
+	BrandVoiceID   *string `json:"brand_voice_id"`
 	// TargetKind is one of the BlogTarget constants, or nil when unset.
-	TargetKind      *string `json:"targetKind"`
-	TargetAccountID *string `json:"targetAccountId"`
-	TargetPlatform  *string `json:"targetPlatform"`
+	TargetKind      *string `json:"target_kind"`
+	TargetAccountID *string `json:"target_account_id"`
+	TargetPlatform  *string `json:"target_platform"`
 	// WebsiteURL receives published articles as a signed webhook.
-	WebsiteURL       *string `json:"websiteUrl"`
-	HasWebsiteSecret bool    `json:"hasWebsiteSecret"`
+	WebsiteURL       *string `json:"website_url"`
+	HasWebsiteSecret bool    `json:"has_website_secret"`
 	// PlanRun is the last keyword research run, nil before the first.
-	PlanRun *BlogPlanRun `json:"planRun"`
+	PlanRun *BlogPlanRun `json:"plan_run"`
 	// KeywordDataAvailable reports whether search volume and difficulty can
 	// be fetched on this deployment.
-	KeywordDataAvailable bool `json:"keywordDataAvailable"`
-	UpdatedAt            Time `json:"updatedAt"`
+	KeywordDataAvailable bool `json:"keyword_data_available"`
+	UpdatedAt            Time `json:"updated_at"`
 }
 
 // BlogPlanRun is the state of a keyword research run.
@@ -96,7 +96,7 @@ type BlogPlanRun struct {
 	Error  *string `json:"error"`
 	// Added is how many new keywords the run found.
 	Added      *int  `json:"added"`
-	FinishedAt *Time `json:"finishedAt"`
+	FinishedAt *Time `json:"finished_at"`
 }
 
 // UpdateBlogSettingsRequest is the body of UpdateSettings. Only the fields
@@ -128,41 +128,88 @@ type UpdateBlogSettingsRequest struct {
 // only when the call set a website URL for the first time; store it then,
 // it is never shown again.
 type UpdatedBlogSettings struct {
-	Settings      BlogSettings `json:"data"`
-	WebsiteSecret *string      `json:"websiteSecret"`
+	Settings      BlogSettings
+	WebsiteSecret *string
 }
 
-// BlogWebsiteTest is the outcome of TestWebsite.
+// UnmarshalJSON reads the flat response, where website_secret sits beside
+// the settings fields.
+func (u *UpdatedBlogSettings) UnmarshalJSON(data []byte) error {
+	var secret struct {
+		WebsiteSecret *string `json:"website_secret"`
+	}
+	if err := json.Unmarshal(data, &secret); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, &u.Settings); err != nil {
+		return err
+	}
+	u.WebsiteSecret = secret.WebsiteSecret
+	return nil
+}
+
+// MarshalJSON writes the same flat shape the API returns.
+func (u UpdatedBlogSettings) MarshalJSON() ([]byte, error) {
+	raw, err := json.Marshal(u.Settings)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	fields["website_secret"] = u.WebsiteSecret
+	return json.Marshal(fields)
+}
+
+// BlogWebsiteTest is the outcome of a TestWebsite the website accepted.
 type BlogWebsiteTest struct {
-	OK     bool    `json:"ok"`
-	Status *int    `json:"status"`
-	Error  *string `json:"error"`
+	// HTTPStatus is what the website answered.
+	HTTPStatus int `json:"http_status"`
 }
 
 // BlogKeyword is one keyword in the plan.
 type BlogKeyword struct {
 	ID           string   `json:"id"`
 	Keyword      string   `json:"keyword"`
-	SearchVolume *int     `json:"searchVolume"`
+	SearchVolume *int     `json:"search_volume"`
 	Difficulty   *int     `json:"difficulty"`
 	CPC          *float64 `json:"cpc"`
 	Intent       *string  `json:"intent"`
 	Source       string   `json:"source"`
 	Status       string   `json:"status"`
 	// PlannedFor is a YYYY-MM-DD date.
-	PlannedFor *string `json:"plannedFor"`
+	PlannedFor *string `json:"planned_for"`
 	// FitReason says why the keyword serves the blog goal.
-	FitReason *string `json:"fitReason"`
-	CreatedAt Time    `json:"createdAt"`
+	FitReason *string `json:"fit_reason"`
+	CreatedAt Time    `json:"created_at"`
 }
 
 // BlogArticleImage is an image on an article. Position is the index of the
 // outline heading it sits under, and nil on the featured image.
 type BlogArticleImage struct {
-	MediaID  string `json:"mediaId"`
+	MediaID  string `json:"media_id"`
 	URL      string `json:"url"`
 	Alt      string `json:"alt"`
 	Position *int   `json:"position,omitempty"`
+}
+
+// UnmarshalJSON also reads mediaId, which the article.published webhook
+// payload still sends.
+func (i *BlogArticleImage) UnmarshalJSON(data []byte) error {
+	type plain BlogArticleImage
+	var wire struct {
+		plain
+		LegacyMediaID string `json:"mediaId"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*i = BlogArticleImage(wire.plain)
+	if i.MediaID == "" {
+		i.MediaID = wire.LegacyMediaID
+	}
+	return nil
 }
 
 // BlogArticle is one article as a list returns it.
@@ -172,20 +219,20 @@ type BlogArticle struct {
 	Slug            string            `json:"slug"`
 	Keyword         *string           `json:"keyword"`
 	Excerpt         *string           `json:"excerpt"`
-	MetaTitle       *string           `json:"metaTitle"`
-	MetaDescription *string           `json:"metaDescription"`
-	FeaturedImage   *BlogArticleImage `json:"featuredImage"`
+	MetaTitle       *string           `json:"meta_title"`
+	MetaDescription *string           `json:"meta_description"`
+	FeaturedImage   *BlogArticleImage `json:"featured_image"`
 	Tags            []string          `json:"tags"`
-	WordCount       int               `json:"wordCount"`
+	WordCount       int               `json:"word_count"`
 	Status          string            `json:"status"`
 	Origin          string            `json:"origin"`
-	ReviewUntil     *Time             `json:"reviewUntil"`
-	PublishAt       *Time             `json:"publishAt"`
-	PublishedAt     *Time             `json:"publishedAt"`
-	PublishedURL    *string           `json:"publishedUrl"`
+	ReviewUntil     *Time             `json:"review_until"`
+	PublishAt       *Time             `json:"publish_at"`
+	PublishedAt     *Time             `json:"published_at"`
+	PublishedURL    *string           `json:"published_url"`
 	Error           *string           `json:"error"`
-	CreatedAt       Time              `json:"createdAt"`
-	UpdatedAt       Time              `json:"updatedAt"`
+	CreatedAt       Time              `json:"created_at"`
+	UpdatedAt       Time              `json:"updated_at"`
 }
 
 // BlogArticleFull is one article with its body, as GetArticle returns it.
@@ -195,8 +242,8 @@ type BlogArticleFull struct {
 	Outline      []string `json:"outline"`
 	// Brief is the research the writer worked from.
 	Brief        json.RawMessage    `json:"brief"`
-	BodyMarkdown string             `json:"bodyMarkdown"`
-	BodyHTML     string             `json:"bodyHtml"`
+	BodyMarkdown string             `json:"body_markdown"`
+	BodyHTML     string             `json:"body_html"`
 	Images       []BlogArticleImage `json:"images"`
 }
 
@@ -264,13 +311,13 @@ type UpdateBlogArticleRequest struct {
 
 func blogWorkspaceQuery(workspaceID string) url.Values {
 	q := newQuery()
-	q.str("workspaceId", workspaceID)
+	q.str("workspace_id", workspaceID)
 	return q.values()
 }
 
 func blogListQuery(workspaceID string, status []string, limit int) url.Values {
 	q := newQuery()
-	q.str("workspaceId", workspaceID)
+	q.str("workspace_id", workspaceID)
 	q.str("status", strings.Join(status, ","))
 	q.num("limit", limit)
 	return q.values()
@@ -300,8 +347,7 @@ func (s *BlogService) UpdateSettings(ctx context.Context, workspaceID string, pa
 		*UpdateBlogSettingsRequest
 	}{blogWorkspaceBody{workspaceID}, patch}
 	out := &UpdatedBlogSettings{}
-	// Do keeps the envelope: websiteSecret sits beside data, not inside it.
-	if err := s.client.Do(ctx, "PATCH", "/blog/settings", body, nil, out); err != nil {
+	if err := s.client.json(ctx, "PATCH", "/blog/settings", body, nil, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -311,7 +357,7 @@ func (s *BlogService) UpdateSettings(ctx context.Context, workspaceID string, pa
 // one stops verifying at once.
 func (s *BlogService) RotateWebsiteSecret(ctx context.Context, workspaceID string) (string, error) {
 	var out struct {
-		WebsiteSecret string `json:"websiteSecret"`
+		WebsiteSecret string `json:"website_secret"`
 	}
 	if err := s.client.json(ctx, "POST", "/blog/settings/website-secret", blogWorkspaceBody{workspaceID}, nil, &out); err != nil {
 		return "", err
@@ -320,7 +366,8 @@ func (s *BlogService) RotateWebsiteSecret(ctx context.Context, workspaceID strin
 }
 
 // TestWebsite sends a signed `article.test` delivery to the website URL. A
-// website that does not answer 2xx comes back as a 502 *Error.
+// website that does not answer 2xx comes back as a 502 *Error whose
+// `http_status` field (read with Field) holds what it answered.
 func (s *BlogService) TestWebsite(ctx context.Context, workspaceID string) (*BlogWebsiteTest, error) {
 	out := &BlogWebsiteTest{}
 	if err := s.client.json(ctx, "POST", "/blog/settings/website-test", blogWorkspaceBody{workspaceID}, nil, out); err != nil {

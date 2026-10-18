@@ -15,7 +15,7 @@ func TestBlogSettingsPatchKeepsTheSecretBesideTheData(t *testing.T) {
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		method, path = r.Method, r.URL.Path
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		_, _ = io.WriteString(w, `{"data":{"goal":"leads","focusTopics":"trail gear","avoidTopics":"politics","language":"en","cadencePerWeek":2,"reviewHoldDays":3,"imageTier":"standard","targetKind":"website","websiteUrl":"https://yourbrand.com/fopost","hasWebsiteSecret":true,"keywordDataAvailable":true,"updatedAt":"2026-10-11T09:00:00.000Z"},"websiteSecret":"whsec_first"}`)
+		_, _ = io.WriteString(w, `{"site_url":null,"topic":null,"audience":null,"goal":"leads","focus_topics":"trail gear","avoid_topics":"politics","language":"en","location_code":2840,"cadence_per_week":2,"review_hold_days":3,"image_tier":"standard","in_body_images":1,"min_words":1200,"max_words":1800,"brand_voice_id":null,"target_kind":"website","target_account_id":null,"target_platform":null,"website_url":"https://yourbrand.com/fopost","has_website_secret":true,"plan_run":null,"updated_at":"2026-10-11T09:00:00.000Z","website_secret":"whsec_first"}`)
 	})
 
 	updated, err := client.Blog.UpdateSettings(context.Background(), "ws_1", &UpdateBlogSettingsRequest{
@@ -50,6 +50,15 @@ func TestBlogSettingsPatchKeepsTheSecretBesideTheData(t *testing.T) {
 	if *updated.Settings.Goal != BlogGoalLeads || *updated.Settings.FocusTopics != "trail gear" || updated.Settings.PlanRun != nil {
 		t.Fatalf("goal settings = %+v", updated.Settings)
 	}
+	if updated.Settings.LocationCode != 2840 || updated.Settings.MaxWords != 1800 || updated.Settings.UpdatedAt.IsZero() {
+		t.Fatalf("snake_case settings did not decode: %+v", updated.Settings)
+	}
+	out, _ := json.Marshal(updated)
+	var flat map[string]any
+	_ = json.Unmarshal(out, &flat)
+	if flat["website_secret"] != "whsec_first" || flat["cadence_per_week"] != float64(2) {
+		t.Fatalf("marshalled = %s", out)
+	}
 }
 
 func TestBlogSettingsReadAndSecretRoutes(t *testing.T) {
@@ -60,11 +69,11 @@ func TestBlogSettingsReadAndSecretRoutes(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery+" ws="+asString(body["workspaceId"]))
 		switch r.URL.Path {
 		case "/blog/settings":
-			_, _ = io.WriteString(w, `{"data":{"goal":null,"language":"en","cadencePerWeek":0,"reviewHoldDays":3,"hasWebsiteSecret":false,"websiteUrl":null,"planRun":{"status":"done","error":null,"added":12,"finishedAt":"2026-10-17T08:00:00.000Z"}}}`)
+			_, _ = io.WriteString(w, `{"goal":null,"language":"en","cadence_per_week":0,"review_hold_days":3,"has_website_secret":false,"website_url":null,"plan_run":{"status":"done","error":null,"added":12,"finished_at":"2026-10-17T08:00:00.000Z"},"keyword_data_available":true}`)
 		case "/blog/settings/website-secret":
-			_, _ = io.WriteString(w, `{"data":{"websiteSecret":"whsec_rotated"}}`)
+			_, _ = io.WriteString(w, `{"website_secret":"whsec_rotated"}`)
 		case "/blog/settings/website-test":
-			_, _ = io.WriteString(w, `{"data":{"ok":true,"status":200,"error":null}}`)
+			_, _ = io.WriteString(w, `{"http_status":204}`)
 		}
 	})
 
@@ -72,7 +81,7 @@ func TestBlogSettingsReadAndSecretRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.GetSettings: %v", err)
 	}
-	if settings.WebsiteURL != nil || settings.HasWebsiteSecret || settings.Goal != nil {
+	if settings.WebsiteURL != nil || settings.HasWebsiteSecret || settings.Goal != nil || !settings.KeywordDataAvailable {
 		t.Fatalf("settings = %+v", settings)
 	}
 	if run := settings.PlanRun; run == nil || run.Status != "done" || run.Error != nil || *run.Added != 12 || run.FinishedAt == nil {
@@ -89,12 +98,12 @@ func TestBlogSettingsReadAndSecretRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.TestWebsite: %v", err)
 	}
-	if !result.OK || result.Status == nil || *result.Status != 200 || result.Error != nil {
+	if result.HTTPStatus != 204 {
 		t.Fatalf("result = %+v", result)
 	}
 
 	want := []string{
-		"GET /blog/settings?workspaceId=ws_1 ws=",
+		"GET /blog/settings?workspace_id=ws_1 ws=",
 		"POST /blog/settings/website-secret? ws=ws_1",
 		"POST /blog/settings/website-test? ws=ws_1",
 	}
@@ -115,15 +124,15 @@ func TestBlogKeywordsRoutesAndBodies(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
 		switch {
 		case r.Method == http.MethodGet:
-			_, _ = io.WriteString(w, `{"data":[{"id":"kw_1","keyword":"running shoes","searchVolume":1200,"difficulty":34,"cpc":1.5,"intent":"commercial","source":"provider","status":"suggested","plannedFor":null,"fitReason":"Buyers compare models before they sign up","createdAt":"2026-10-01T00:00:00.000Z"}]}`)
+			_, _ = io.WriteString(w, `{"data":[{"id":"kw_1","keyword":"running shoes","search_volume":1200,"difficulty":34,"cpc":1.5,"intent":"commercial","source":"provider","status":"suggested","planned_for":null,"fit_reason":"Buyers compare models before they sign up","created_at":"2026-10-01T00:00:00.000Z"}]}`)
 		case r.URL.Path == "/blog/keywords/plan":
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = io.WriteString(w, `{"data":{"status":"queued"}}`)
+			_, _ = io.WriteString(w, `{"status":"queued"}`)
 		case r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
-			_, _ = io.WriteString(w, `{"data":{"id":"kw_2","keyword":"trail shoes","source":"user","status":"planned","plannedFor":"2026-10-20","createdAt":"2026-10-11T00:00:00.000Z"}}`)
+			_, _ = io.WriteString(w, `{"id":"kw_2","keyword":"trail shoes","search_volume":null,"difficulty":null,"cpc":null,"intent":null,"source":"user","status":"planned","planned_for":"2026-10-20","fit_reason":null,"created_at":"2026-10-11T00:00:00.000Z"}`)
 		case r.Method == http.MethodPatch:
-			_, _ = io.WriteString(w, `{"data":{"id":"kw_1","keyword":"running shoes","source":"provider","status":"dismissed","createdAt":"2026-10-01T00:00:00.000Z"}}`)
+			_, _ = io.WriteString(w, `{"id":"kw_1","keyword":"running shoes","source":"provider","status":"dismissed","planned_for":null,"created_at":"2026-10-01T00:00:00.000Z"}`)
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -150,7 +159,7 @@ func TestBlogKeywordsRoutesAndBodies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.AddKeyword: %v", err)
 	}
-	if added.ID != "kw_2" || *added.PlannedFor != "2026-10-20" {
+	if added.ID != "kw_2" || *added.PlannedFor != "2026-10-20" || added.CreatedAt.IsZero() {
 		t.Fatalf("added = %+v", added)
 	}
 	updated, err := client.Blog.UpdateKeyword(ctx, "ws_1", "kw_1", &UpdateBlogKeywordRequest{Status: BlogKeywordStatusDismissed})
@@ -165,11 +174,11 @@ func TestBlogKeywordsRoutesAndBodies(t *testing.T) {
 	}
 
 	want := []string{
-		"GET /blog/keywords?limit=50&status=suggested%2Cplanned&workspaceId=ws_1",
+		"GET /blog/keywords?limit=50&status=suggested%2Cplanned&workspace_id=ws_1",
 		"POST /blog/keywords/plan?",
 		"POST /blog/keywords?",
-		"PATCH /blog/keywords/kw_1?workspaceId=ws_1",
-		"DELETE /blog/keywords/kw_1?workspaceId=ws_1",
+		"PATCH /blog/keywords/kw_1?workspace_id=ws_1",
+		"DELETE /blog/keywords/kw_1?workspace_id=ws_1",
 	}
 	for i := range want {
 		if calls[i] != want[i] {
@@ -203,17 +212,17 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/blog/articles":
-			_, _ = io.WriteString(w, `{"data":[{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":["gear"],"wordCount":1200,"status":"draft","origin":"plan","featuredImage":{"mediaId":"m_1","url":"https://cdn.yourbrand.com/1.jpg","alt":"Shoes"},"reviewUntil":"2026-10-14T00:00:00.000Z","publishAt":null,"createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z"}]}`)
+			_, _ = io.WriteString(w, `{"data":[{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","keyword":"trail shoes","excerpt":null,"meta_title":"Trail shoes","meta_description":null,"tags":["gear"],"word_count":1200,"status":"draft","origin":"plan","featured_image":{"media_id":"m_1","url":"https://cdn.yourbrand.com/1.jpg","alt":"Shoes"},"review_until":"2026-10-14T00:00:00.000Z","publish_at":null,"published_at":null,"published_url":null,"error":null,"created_at":"2026-10-11T00:00:00.000Z","updated_at":"2026-10-11T00:00:00.000Z"}]}`)
 		case r.Method == http.MethodGet:
-			_, _ = io.WriteString(w, `{"data":{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"wordCount":1200,"status":"draft","origin":"plan","createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z","outline":["Why","How"],"brief":{"sources":2},"bodyMarkdown":"# Trail shoes","bodyHtml":"<h1>Trail shoes</h1>","images":[{"mediaId":"m_2","url":"https://cdn.yourbrand.com/2.jpg","alt":"Trail","position":1}]}}`)
+			_, _ = io.WriteString(w, `{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"word_count":1200,"status":"draft","origin":"plan","created_at":"2026-10-11T00:00:00.000Z","updated_at":"2026-10-11T00:00:00.000Z","instructions":null,"outline":["Why","How"],"brief":{"questions":["Which fits?"],"search_volume":1200},"body_markdown":"# Trail shoes","body_html":"<h1>Trail shoes</h1>","images":[{"media_id":"m_2","url":"https://cdn.yourbrand.com/2.jpg","alt":"Trail","position":1}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/blog/articles":
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = io.WriteString(w, `{"data":{"id":"art_2","title":"Running shoes","slug":"running-shoes","tags":[],"wordCount":0,"status":"queued","origin":"user","createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z"}}`)
+			_, _ = io.WriteString(w, `{"id":"art_2","title":"Running shoes","slug":"running-shoes","tags":[],"word_count":0,"status":"queued","origin":"user","created_at":"2026-10-11T00:00:00.000Z","updated_at":"2026-10-11T00:00:00.000Z"}`)
 		case r.Method == http.MethodPatch:
-			_, _ = io.WriteString(w, `{"data":{"id":"art_1","title":"Trail shoes, ranked","slug":"trail-shoes","tags":["gear"],"wordCount":1200,"status":"scheduled","origin":"plan","publishAt":"2026-10-15T09:00:00.000Z","createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z","bodyMarkdown":"# Trail shoes","bodyHtml":"","images":[]}}`)
+			_, _ = io.WriteString(w, `{"id":"art_1","title":"Trail shoes, ranked","slug":"trail-shoes","tags":["gear"],"word_count":1200,"status":"scheduled","origin":"plan","publish_at":"2026-10-15T09:00:00.000Z","created_at":"2026-10-11T00:00:00.000Z","updated_at":"2026-10-11T00:00:00.000Z","body_markdown":"# Trail shoes","body_html":"","images":[]}`)
 		case r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = io.WriteString(w, `{"data":{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"wordCount":1200,"status":"publishing","origin":"plan","createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z"}}`)
+			_, _ = io.WriteString(w, `{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"word_count":1200,"status":"publishing","origin":"plan","created_at":"2026-10-11T00:00:00.000Z","updated_at":"2026-10-11T00:00:00.000Z"}`)
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -224,7 +233,7 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.ListArticles: %v", err)
 	}
-	if len(articles) != 1 || articles[0].FeaturedImage.MediaID != "m_1" || articles[0].PublishAt != nil || articles[0].ReviewUntil == nil {
+	if len(articles) != 1 || articles[0].FeaturedImage.MediaID != "m_1" || articles[0].PublishAt != nil || articles[0].ReviewUntil == nil || articles[0].WordCount != 1200 || *articles[0].MetaTitle != "Trail shoes" {
 		t.Fatalf("articles = %+v", articles)
 	}
 	requested, err := client.Blog.RequestArticle(ctx, "ws_1", &RequestBlogArticleRequest{Keyword: "running shoes", Instructions: "Compare three models"})
@@ -238,7 +247,7 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.GetArticle: %v", err)
 	}
-	if full.BodyMarkdown != "# Trail shoes" || len(full.Outline) != 2 || string(full.Brief) != `{"sources":2}` || *full.Images[0].Position != 1 {
+	if full.BodyMarkdown != "# Trail shoes" || full.BodyHTML != "<h1>Trail shoes</h1>" || len(full.Outline) != 2 || string(full.Brief) != `{"questions":["Which fits?"],"search_volume":1200}` || full.Images[0].MediaID != "m_2" || *full.Images[0].Position != 1 {
 		t.Fatalf("full = %+v", full)
 	}
 	edited, err := client.Blog.UpdateArticle(ctx, "ws_1", "art_1", &UpdateBlogArticleRequest{
@@ -248,7 +257,7 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.UpdateArticle: %v", err)
 	}
-	if edited.Status != BlogArticleStatusScheduled || edited.PublishAt == nil {
+	if edited.Status != BlogArticleStatusScheduled || edited.PublishAt == nil || edited.Title != "Trail shoes, ranked" {
 		t.Fatalf("edited = %+v", edited)
 	}
 	for name, action := range map[string]func(context.Context, string, string) (*BlogArticle, error){
@@ -265,10 +274,10 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 	}
 
 	for i, want := range []string{
-		"GET /blog/articles?status=draft&workspaceId=ws_1",
+		"GET /blog/articles?status=draft&workspace_id=ws_1",
 		"POST /blog/articles?",
-		"GET /blog/articles/art_1?workspaceId=ws_1",
-		"PATCH /blog/articles/art_1?workspaceId=ws_1",
+		"GET /blog/articles/art_1?workspace_id=ws_1",
+		"PATCH /blog/articles/art_1?workspace_id=ws_1",
 	} {
 		if calls[i] != want {
 			t.Fatalf("call %d = %q, want %q", i, calls[i], want)
@@ -279,15 +288,15 @@ func TestBlogArticlesRoutesAndBodies(t *testing.T) {
 		seen[call] = true
 	}
 	for _, want := range []string{
-		"POST /blog/articles/art_1/regenerate?workspaceId=ws_1",
-		"POST /blog/articles/art_1/publish?workspaceId=ws_1",
-		"POST /blog/articles/art_1/reject?workspaceId=ws_1",
+		"POST /blog/articles/art_1/regenerate?workspace_id=ws_1",
+		"POST /blog/articles/art_1/publish?workspace_id=ws_1",
+		"POST /blog/articles/art_1/reject?workspace_id=ws_1",
 	} {
 		if !seen[want] {
 			t.Fatalf("missing call %q in %v", want, calls[4:7])
 		}
 	}
-	if calls[7] != "DELETE /blog/articles/art_1?workspaceId=ws_1" {
+	if calls[7] != "DELETE /blog/articles/art_1?workspace_id=ws_1" {
 		t.Fatalf("delete call = %q", calls[7])
 	}
 	if bodies[1]["workspaceId"] != "ws_1" || bodies[1]["keyword"] != "running shoes" || bodies[1]["instructions"] != "Compare three models" {
@@ -354,7 +363,7 @@ func TestBlogSubmitArticleMovesItToReview(t *testing.T) {
 			_, _ = io.WriteString(w, `{"error":"invalid_status","message":"Only a draft, failed or rejected article can be submitted"}`)
 			return
 		}
-		_, _ = io.WriteString(w, `{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"wordCount":1200,"status":"in_review","origin":"plan","createdAt":"2026-10-11T00:00:00.000Z","updatedAt":"2026-10-11T00:00:00.000Z"}`)
+		_, _ = io.WriteString(w, `{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","tags":[],"word_count":1200,"status":"in_review","origin":"plan","created_at":"2026-10-11T00:00:00.000Z","updated_at":"2026-10-11T00:00:00.000Z"}`)
 	})
 	ctx := context.Background()
 
@@ -362,7 +371,7 @@ func TestBlogSubmitArticleMovesItToReview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Blog.SubmitArticle: %v", err)
 	}
-	if call != "POST /blog/articles/art_1/submit?workspaceId=ws_1" || hadBody {
+	if call != "POST /blog/articles/art_1/submit?workspace_id=ws_1" || hadBody {
 		t.Fatalf("call = %q, body sent = %v", call, hadBody)
 	}
 	if article.Status != BlogArticleStatusInReview {
@@ -396,6 +405,23 @@ func TestBlogCreditAndTargetErrorsMapToPredicates(t *testing.T) {
 	_, err = client.Blog.PublishArticle(ctx, "ws_1", "art_1")
 	if !IsConflict(err) || CodeOf(err) != "no_target" {
 		t.Fatalf("expected a 409 no_target, got %v", err)
+	}
+}
+
+func TestBlogWebsiteTestFailureCarriesTheHTTPStatus(t *testing.T) {
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, `{"error":"website_test_failed","message":"The website answered 500","http_status":500}`)
+	})
+
+	_, err := client.Blog.TestWebsite(context.Background(), "ws_1")
+	apiErr, ok := APIError(err)
+	if !ok || apiErr.Status != http.StatusBadGateway || CodeOf(err) != "website_test_failed" {
+		t.Fatalf("expected a 502 website_test_failed, got %v", err)
+	}
+	var status int
+	if err := apiErr.Field("http_status", &status); err != nil || status != 500 {
+		t.Fatalf("http_status = %d (%v)", status, err)
 	}
 }
 
