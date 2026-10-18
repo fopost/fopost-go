@@ -87,11 +87,13 @@ func (r UpdateGoogleBusinessLocationRequest) MarshalJSON() ([]byte, error) {
 }
 
 // GetLocation returns the connected location, in the Business Information shape.
+// Wraps the API's `getGoogleBusinessLocation` operation.
 func (s *GoogleBusinessService) GetLocation(ctx context.Context, id string) (GoogleBusinessPayload, error) {
 	return s.read(ctx, "GET", gbpPath(id, "/location"), nil, nil)
 }
 
 // UpdateLocation patches only the fields the request carries.
+// Wraps the API's `updateGoogleBusinessLocation` operation.
 func (s *GoogleBusinessService) UpdateLocation(ctx context.Context, id string, body *UpdateGoogleBusinessLocationRequest) (GoogleBusinessPayload, error) {
 	if body == nil {
 		body = &UpdateGoogleBusinessLocationRequest{}
@@ -110,6 +112,7 @@ type GoogleBusinessAttributesOptions struct {
 
 // GetAttributes returns the attribute values set on the location, or, with
 // Available, the attributes Google offers for its category and region.
+// Wraps the API's `getGoogleBusinessAttributes` operation.
 func (s *GoogleBusinessService) GetAttributes(ctx context.Context, id string, opts *GoogleBusinessAttributesOptions) (GoogleBusinessPayload, error) {
 	query := url.Values{}
 	if opts != nil {
@@ -124,6 +127,7 @@ func (s *GoogleBusinessService) GetAttributes(ctx context.Context, id string, op
 }
 
 // UpdateAttributes changes only the named attributes; the rest are left alone.
+// Wraps the API's `updateGoogleBusinessAttributes` operation.
 func (s *GoogleBusinessService) UpdateAttributes(ctx context.Context, id string, attributes []map[string]any) (GoogleBusinessPayload, error) {
 	if attributes == nil {
 		attributes = []map[string]any{}
@@ -132,11 +136,13 @@ func (s *GoogleBusinessService) UpdateAttributes(ctx context.Context, id string,
 }
 
 // GetMenus returns the location's food menus.
+// Wraps the API's `getGoogleBusinessMenus` operation.
 func (s *GoogleBusinessService) GetMenus(ctx context.Context, id string) (GoogleBusinessPayload, error) {
 	return s.read(ctx, "GET", gbpPath(id, "/menus"), nil, nil)
 }
 
 // ReplaceMenus replaces the whole menu set; Google has no per-section patch.
+// Wraps the API's `replaceGoogleBusinessMenus` operation.
 func (s *GoogleBusinessService) ReplaceMenus(ctx context.Context, id string, menus []map[string]any) (GoogleBusinessPayload, error) {
 	if menus == nil {
 		menus = []map[string]any{}
@@ -145,11 +151,13 @@ func (s *GoogleBusinessService) ReplaceMenus(ctx context.Context, id string, men
 }
 
 // GetServices returns the location's service list.
+// Wraps the API's `getGoogleBusinessServices` operation.
 func (s *GoogleBusinessService) GetServices(ctx context.Context, id string) (GoogleBusinessPayload, error) {
 	return s.read(ctx, "GET", gbpPath(id, "/services"), nil, nil)
 }
 
 // ReplaceServices replaces the whole service list.
+// Wraps the API's `replaceGoogleBusinessServices` operation.
 func (s *GoogleBusinessService) ReplaceServices(ctx context.Context, id string, serviceItems []map[string]any) (GoogleBusinessPayload, error) {
 	if serviceItems == nil {
 		serviceItems = []map[string]any{}
@@ -158,6 +166,7 @@ func (s *GoogleBusinessService) ReplaceServices(ctx context.Context, id string, 
 }
 
 // ListMedia returns the photos on the location.
+// Wraps the API's `listGoogleBusinessMedia` operation.
 func (s *GoogleBusinessService) ListMedia(ctx context.Context, id string, pageSize int, pageToken string) (GoogleBusinessPayload, error) {
 	query := url.Values{}
 	if pageSize > 0 {
@@ -176,6 +185,7 @@ type AddGoogleBusinessMediaRequest struct {
 }
 
 // AddMedia adds a library photo to the location.
+// Wraps the API's `addGoogleBusinessMedia` operation.
 func (s *GoogleBusinessService) AddMedia(ctx context.Context, id string, body *AddGoogleBusinessMediaRequest) (GoogleBusinessPayload, error) {
 	if body == nil {
 		body = &AddGoogleBusinessMediaRequest{}
@@ -184,11 +194,13 @@ func (s *GoogleBusinessService) AddMedia(ctx context.Context, id string, body *A
 }
 
 // DeleteMedia removes a photo by the media key Google returned.
+// Wraps the API's `deleteGoogleBusinessMedia` operation.
 func (s *GoogleBusinessService) DeleteMedia(ctx context.Context, id, mediaKey string) (GoogleBusinessPayload, error) {
 	return s.read(ctx, "DELETE", gbpPath(id, "/media/"+url.PathEscape(mediaKey)), nil, nil)
 }
 
 // ListPlaceActions returns the Book, Order and Reserve links on the listing.
+// Wraps the API's `listGoogleBusinessPlaceActions` operation.
 func (s *GoogleBusinessService) ListPlaceActions(ctx context.Context, id string) (GoogleBusinessPayload, error) {
 	return s.read(ctx, "GET", gbpPath(id, "/place-actions"), nil, nil)
 }
@@ -201,6 +213,7 @@ type CreateGoogleBusinessPlaceActionRequest struct {
 }
 
 // CreatePlaceAction adds an action link to the listing.
+// Wraps the API's `createGoogleBusinessPlaceAction` operation.
 func (s *GoogleBusinessService) CreatePlaceAction(ctx context.Context, id string, body *CreateGoogleBusinessPlaceActionRequest) (GoogleBusinessPayload, error) {
 	if body == nil {
 		body = &CreateGoogleBusinessPlaceActionRequest{}
@@ -216,6 +229,7 @@ type UpdateGoogleBusinessPlaceActionRequest struct {
 }
 
 // UpdatePlaceAction patches one action link.
+// Wraps the API's `updateGoogleBusinessPlaceAction` operation.
 func (s *GoogleBusinessService) UpdatePlaceAction(ctx context.Context, id, linkID string, body *UpdateGoogleBusinessPlaceActionRequest) (GoogleBusinessPayload, error) {
 	if body == nil {
 		body = &UpdateGoogleBusinessPlaceActionRequest{}
@@ -224,11 +238,13 @@ func (s *GoogleBusinessService) UpdatePlaceAction(ctx context.Context, id, linkI
 }
 
 // DeletePlaceAction removes one action link.
+// Wraps the API's `deleteGoogleBusinessPlaceAction` operation.
 func (s *GoogleBusinessService) DeletePlaceAction(ctx context.Context, id, linkID string) (GoogleBusinessPayload, error) {
 	return s.read(ctx, "DELETE", gbpPath(id, "/place-actions/"+url.PathEscape(linkID)), nil, nil)
 }
 
 // GetVerificationOptions returns the ways Google will let this location be verified.
+// Wraps the API's `getGoogleBusinessVerificationOptions` operation.
 func (s *GoogleBusinessService) GetVerificationOptions(ctx context.Context, id, languageCode string) (GoogleBusinessPayload, error) {
 	query := url.Values{}
 	setIfNotEmpty(query, "language_code", languageCode)
@@ -246,6 +262,7 @@ type StartGoogleBusinessVerificationRequest struct {
 }
 
 // StartVerification begins verifying the location.
+// Wraps the API's `startGoogleBusinessVerification` operation.
 func (s *GoogleBusinessService) StartVerification(ctx context.Context, id string, body *StartGoogleBusinessVerificationRequest) (GoogleBusinessPayload, error) {
 	if body == nil {
 		body = &StartGoogleBusinessVerificationRequest{}
@@ -254,6 +271,7 @@ func (s *GoogleBusinessService) StartVerification(ctx context.Context, id string
 }
 
 // CompleteVerification finishes a pending verification with the PIN Google sent.
+// Wraps the API's `completeGoogleBusinessVerification` operation.
 func (s *GoogleBusinessService) CompleteVerification(ctx context.Context, id, verificationName, pin string) (GoogleBusinessPayload, error) {
 	body := map[string]any{"verification_name": verificationName, "pin": pin}
 	return s.read(ctx, "POST", gbpPath(id, "/verification/complete"), body, nil)
@@ -261,6 +279,7 @@ func (s *GoogleBusinessService) CompleteVerification(ctx context.Context, id, ve
 
 // GetPerformance returns daily impressions, calls, direction requests and
 // clicks for the range. Nil dailyMetrics leaves the API's default set.
+// Wraps the API's `getGoogleBusinessPerformance` operation.
 func (s *GoogleBusinessService) GetPerformance(ctx context.Context, id, startDate, endDate string, dailyMetrics []string) (GoogleBusinessPayload, error) {
 	query := url.Values{"start_date": {startDate}, "end_date": {endDate}}
 	for _, metric := range dailyMetrics {
@@ -279,6 +298,7 @@ func (s *GoogleBusinessService) GetSearchKeywords(ctx context.Context, id, start
 
 // Assign hands the location to another workspace the caller owns. The
 // connection and every row keyed to it move in one transaction.
+// Wraps the API's `assignGoogleBusinessLocation` operation.
 func (s *GoogleBusinessService) Assign(ctx context.Context, id, workspaceID string) (*MovedAccount, error) {
 	out := &MovedAccount{}
 	body := map[string]any{"workspace_id": workspaceID}

@@ -588,6 +588,7 @@ func (s *InboxService) action(ctx context.Context, id, action string, body any) 
 
 // Like likes an item: an upvote on Reddit, a favourite on Mastodon. Also needs
 // the `publish` scope.
+// Wraps the API's `likeInboxItem` operation.
 func (s *InboxService) Like(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "like", nil)
 }
@@ -596,11 +597,13 @@ func (s *InboxService) Like(ctx context.Context, id string) (*InboxItem, error) 
 // direction is "up", "down", or "none" to take an earlier vote back. An upvote
 // is the same call Like makes, so Liked moves with it. Also needs the
 // `publish` scope.
+// Wraps the API's `voteInboxItem` operation.
 func (s *InboxService) Vote(ctx context.Context, id, direction string) (*InboxItem, error) {
 	return s.action(ctx, id, "vote", map[string]string{"direction": direction})
 }
 
 // Unlike removes our like. Also needs the `publish` scope.
+// Wraps the API's `unlikeInboxItem` operation.
 func (s *InboxService) Unlike(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unlike", nil)
 }
@@ -611,12 +614,14 @@ func (s *InboxService) Pin(ctx context.Context, id string) (*InboxItem, error) {
 }
 
 // Unpin unpins our own comment. Also needs the `publish` scope.
+// Wraps the API's `unpinInboxItem` operation.
 func (s *InboxService) Unpin(ctx context.Context, id string) (*InboxItem, error) {
 	return s.action(ctx, id, "unpin", nil)
 }
 
 // React reacts to a DM with an emoji; a nil reaction removes ours. Also needs
 // the `publish` scope.
+// Wraps the API's `reactToInboxItem` operation.
 func (s *InboxService) React(ctx context.Context, id string, reaction *string) (*InboxItem, error) {
 	body := struct {
 		Reaction *string `json:"reaction"`

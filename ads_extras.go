@@ -437,6 +437,7 @@ func (s *AdsService) ReachFrequencyPredictionByID(ctx context.Context, id string
 
 // ReserveReachFrequency holds the inventory the prediction priced. Needs
 // `publish` as well as `ads`.
+// Wraps the API's `reserveReachFrequency` operation.
 func (s *AdsService) ReserveReachFrequency(ctx context.Context, id string, body *ReachFrequencyActionRequest) (*ReachFrequencyPrediction, error) {
 	return s.reachFrequencyAction(ctx, id, "reserve", body)
 }

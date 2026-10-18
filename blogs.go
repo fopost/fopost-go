@@ -147,6 +147,7 @@ func (s *BlogsService) ListArticles(ctx context.Context, accountID, blogID strin
 }
 
 // GetArticle returns one article in full.
+// Wraps the API's `getBlogArticle` operation.
 func (s *BlogsService) GetArticle(ctx context.Context, accountID, blogID, articleID string) (*RemoteArticle, error) {
 	out := &RemoteArticle{}
 	path := articlePath(accountID, blogID) + "/" + url.PathEscape(articleID)
@@ -169,6 +170,7 @@ func (s *BlogsService) CreateArticle(ctx context.Context, accountID, blogID stri
 //
 // The article is addressed by its own id and only the fields set on body
 // travel, so an edit never creates a second post on the site.
+// Wraps the API's `updateBlogArticle` operation.
 func (s *BlogsService) UpdateArticle(ctx context.Context, accountID, blogID, articleID string, body *ArticleRequest) (*RemoteArticle, error) {
 	out := &RemoteArticle{}
 	path := articlePath(accountID, blogID) + "/" + url.PathEscape(articleID)
@@ -180,6 +182,7 @@ func (s *BlogsService) UpdateArticle(ctx context.Context, accountID, blogID, art
 
 // DeleteArticle removes the article from the site. Needs the publish scope;
 // this cannot be undone.
+// Wraps the API's `deleteBlogArticle` operation.
 func (s *BlogsService) DeleteArticle(ctx context.Context, accountID, blogID, articleID string) error {
 	path := articlePath(accountID, blogID) + "/" + url.PathEscape(articleID)
 	return s.client.json(ctx, "DELETE", path, nil, nil, nil)
