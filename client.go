@@ -71,6 +71,8 @@ type Client struct {
 	Activity      *ActivityService
 	Queue         *QueueService
 
+	ConnectSessions *ConnectSessionsService
+
 	GoogleBusiness *GoogleBusinessService
 	Blog           *BlogService
 	Blogs          *BlogsService
@@ -162,6 +164,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Labels = &LabelsService{client: c}
 	c.Activity = &ActivityService{client: c}
 	c.Queue = &QueueService{client: c}
+	c.ConnectSessions = &ConnectSessionsService{client: c}
 	c.Webhooks = &WebhooksService{client: c}
 	c.Analytics = &AnalyticsService{client: c}
 	c.Automations = &AutomationsService{client: c}
