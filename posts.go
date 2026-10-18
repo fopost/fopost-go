@@ -191,9 +191,12 @@ type CreatePostRequest struct {
 	ContentType string `json:"content_type,omitempty"`
 	// ArtifactType is "text_post", "thread", "article", "carousel",
 	// "short_video", or "link_share".
-	ArtifactType      string   `json:"artifact_type,omitempty"`
-	Status            string   `json:"status,omitempty"`
-	ScheduleAt        *Time    `json:"schedule_at,omitempty"`
+	ArtifactType string `json:"artifact_type,omitempty"`
+	Status       string `json:"status,omitempty"`
+	ScheduleAt   *Time  `json:"schedule_at,omitempty"`
+	// Schedule set to ScheduleQueue drops the post into the next free queue
+	// slot instead of ScheduleAt.
+	Schedule          string   `json:"schedule,omitempty"`
 	Repeatable        *bool    `json:"repeatable,omitempty"`
 	RepeatableTimes   *int     `json:"repeatable_times,omitempty"`
 	RepeatableGap     *int     `json:"repeatable_gap,omitempty"`
@@ -291,12 +294,14 @@ func (s *PostsService) Create(ctx context.Context, body *CreatePostRequest, file
 // UpdatePostRequest is the body of Update. Only the fields you set are sent,
 // so an update is a partial one.
 type UpdatePostRequest struct {
-	Accounts          []string       `json:"accounts,omitempty"`
-	Content           []ContentBlock `json:"content,omitempty"`
-	ContentType       string         `json:"content_type,omitempty"`
-	ArtifactType      string         `json:"artifact_type,omitempty"`
-	Status            string         `json:"status,omitempty"`
-	ScheduleAt        *Time          `json:"schedule_at,omitempty"`
+	Accounts     []string       `json:"accounts,omitempty"`
+	Content      []ContentBlock `json:"content,omitempty"`
+	ContentType  string         `json:"content_type,omitempty"`
+	ArtifactType string         `json:"artifact_type,omitempty"`
+	Status       string         `json:"status,omitempty"`
+	ScheduleAt   *Time          `json:"schedule_at,omitempty"`
+	// Schedule set to ScheduleQueue moves the post to the next free queue slot.
+	Schedule          string         `json:"schedule,omitempty"`
 	Repeatable        *bool          `json:"repeatable,omitempty"`
 	RepeatableTimes   *int           `json:"repeatable_times,omitempty"`
 	RepeatableGap     *int           `json:"repeatable_gap,omitempty"`
@@ -574,6 +579,31 @@ type CancelResult struct {
 func (s *PostsService) Cancel(ctx context.Context, id string, opts *CancelOptions) (*CancelResult, error) {
 	out := &CancelResult{}
 	if err := s.client.json(ctx, "POST", "/posts/"+url.PathEscape(id)+"/cancel", bodyOrEmpty(opts), nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UnpublishDelivery is one network the post was live on. Removed is false
+// when the network refused to take the post down.
+type UnpublishDelivery struct {
+	AccountID string `json:"account_id"`
+	Platform  string `json:"platform"`
+	Removed   bool   `json:"removed"`
+}
+
+// UnpublishResult is the post's status after Unpublish and what each network did.
+type UnpublishResult struct {
+	PostStatus string              `json:"post_status"`
+	Deliveries []UnpublishDelivery `json:"deliveries"`
+}
+
+// Unpublish deletes the post on every network it is live on; the post stays
+// as a record. A network that cannot delete a live post refuses the whole
+// call with a 409 carrying `unsupported_platforms`. Needs the `publish` scope.
+func (s *PostsService) Unpublish(ctx context.Context, id string) (*UnpublishResult, error) {
+	out := &UnpublishResult{}
+	if err := s.client.json(ctx, "POST", "/posts/"+url.PathEscape(id)+"/unpublish", nil, nil, out); err != nil {
 		return nil, err
 	}
 	return out, nil

@@ -9,6 +9,16 @@ All notable changes to this module are documented here. Releases are tags on `ma
 - Pixels: `Ads.ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats` and `GetEventMatchQuality`, with `AdPixelDetail`, `AdPixelStats`, `EventMatchQuality` and the `PixelDataUse*` constants.
 - Custom conversions: `Ads.ListCustomConversions`, `CreateCustomConversion`, `GetCustomConversion`, `UpdateCustomConversion` and `DeleteCustomConversion`, with `CustomConversion`, `CustomConversionRule` and the `CustomConversion*` event type constants.
 
+## 0.4.0 - 2026-10-18
+
+- `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
+- `Posts.Unpublish` takes a live post down on every network (`POST /posts/{id}/unpublish`, needs `publish`), answering `UnpublishResult`; `PostStatusUnpublished`.
+- `ConnectSessions` service for hosted connect links: `Create` and `Get`, with `ConnectSession` and the `ConnectSession*` status constants.
+- `Webhooks.ListDeliveries`, `Webhooks.GetDelivery` and `Webhooks.Redeliver` read and replay the delivery log, with the `WebhookDelivery` type.
+- `Automations.ListVersions`, `Automations.GetVersion` and `Automations.RestoreVersion` walk and restore an automation's saved graphs, with `AutomationVersion`, `AutomationVersionSummary`, `RestoredAutomationVersion`, `WorkflowGraph`, `WorkflowNode` and `WorkflowEdge`.
+- `Logs` service: `List` reads recent API activity with its summary and cursor (`GET /logs`, needs `workspaces`).
+- `Analytics.Inbox` reads the inbox roll-up (`GET /analytics/inbox`).
+
 ## 0.3.0 - 2026-10-18
 
 - **Breaking:** the `Blog` service now speaks the live API contract: `workspace_id` on the query string, snake_case response fields, and an unwrapped `UpdateSettings` response with `website_secret` beside the settings. Request bodies are unchanged. `BlogWebsiteTest` is now `{HTTPStatus}`; a website that refuses the test is a `502` `*Error` whose `http_status` field holds its answer.

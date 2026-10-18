@@ -620,3 +620,92 @@ func (s *AnalyticsService) NativePosts(ctx context.Context, accountID string, pa
 	}
 	return out, nil
 }
+
+// InboxAnalyticsParams narrows Inbox. Zero fields are not sent.
+type InboxAnalyticsParams struct {
+	AccountID   string
+	WorkspaceID string
+	// Days is the window, 1 to 365 (default 7).
+	Days int
+	// TZ is the IANA zone the series and heatmap are bucketed in (default UTC).
+	TZ string
+}
+
+func (p *InboxAnalyticsParams) values() url.Values {
+	q := newQuery()
+	if p == nil {
+		return q.values()
+	}
+	q.str("account_id", p.AccountID)
+	q.str("workspace_id", p.WorkspaceID)
+	q.num("days", p.Days)
+	q.str("tz", p.TZ)
+	return q.values()
+}
+
+// InboxAnalytics is the inbox roll-up: volume, response time and where it comes from.
+type InboxAnalytics struct {
+	Totals struct {
+		Received int `json:"received"`
+		Sent     int `json:"sent"`
+		// Answered is the inbound items that got a reply.
+		Answered int `json:"answered"`
+		// Open is the inbound items still unread or read, not resolved.
+		Open          int `json:"open"`
+		Conversations int `json:"conversations"`
+		// MedianResponseMinutes is nil without replies.
+		MedianResponseMinutes *float64 `json:"median_response_minutes"`
+	} `json:"totals"`
+	// Deltas are percentage changes against the previous period of the same length.
+	Deltas struct {
+		Received *float64 `json:"received"`
+		Sent     *float64 `json:"sent"`
+		Answered *float64 `json:"answered"`
+	} `json:"deltas"`
+	Series []struct {
+		Date     string `json:"date"`
+		Received int    `json:"received"`
+		Sent     int    `json:"sent"`
+		Answered int    `json:"answered"`
+	} `json:"series"`
+	ByPlatform []struct {
+		Platform string `json:"platform"`
+		Received int    `json:"received"`
+		Sent     int    `json:"sent"`
+	} `json:"by_platform"`
+	ByType []struct {
+		// Type is comment, mention, reply, dm or review.
+		Type  string `json:"type"`
+		Count int    `json:"count"`
+	} `json:"by_type"`
+	ByAccount []struct {
+		AccountID string  `json:"account_id"`
+		Platform  string  `json:"platform"`
+		Username  string  `json:"username"`
+		Name      string  `json:"name"`
+		Avatar    *string `json:"avatar"`
+		Received  int     `json:"received"`
+		Sent      int     `json:"sent"`
+	} `json:"by_account"`
+	ResponseTime []struct {
+		// Bucket is under_1h, 1h_6h, 6h_24h, 1d_3d or over_3d.
+		Bucket string `json:"bucket"`
+		Count  int    `json:"count"`
+	} `json:"response_time"`
+	Heatmap []struct {
+		// Weekday is 0 (Sunday) through 6.
+		Weekday int `json:"weekday"`
+		Hour    int `json:"hour"`
+		Count   int `json:"count"`
+	} `json:"heatmap"`
+	TimeZone string `json:"time_zone"`
+}
+
+// Inbox returns the inbox roll-up for the window.
+func (s *AnalyticsService) Inbox(ctx context.Context, params *InboxAnalyticsParams) (*InboxAnalytics, error) {
+	out := &InboxAnalytics{}
+	if err := s.client.json(ctx, "GET", "/analytics/inbox", nil, params.values(), out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

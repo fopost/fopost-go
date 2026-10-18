@@ -100,6 +100,72 @@ func (s *WebhooksService) Test(ctx context.Context, id string) (*Message, error)
 	return out, nil
 }
 
+// WebhookDelivery is one attempt to send an event to the endpoint.
+type WebhookDelivery struct {
+	ID        string `json:"id"`
+	WebhookID string `json:"webhook_id"`
+	Event     string `json:"event"`
+	// DeliveryKey is the X-FoPost-Delivery id; every attempt of one event shares it.
+	DeliveryKey string `json:"delivery_key"`
+	// Attempt is 1 for the first send; retries and redeliveries count up.
+	Attempt int `json:"attempt"`
+	// Status is "success" or "failed".
+	Status string `json:"status"`
+	// ResponseStatus is nil when no response arrived.
+	ResponseStatus *int `json:"response_status"`
+	// ResponseSnippet is up to 500 characters of the answer, secrets redacted.
+	ResponseSnippet *string `json:"response_snippet"`
+	DurationMs      int     `json:"duration_ms"`
+	// PayloadHash is the SHA-256 of the body that was sent.
+	PayloadHash string `json:"payload_hash"`
+	NextRetryAt Time   `json:"next_retry_at"`
+	CreatedAt   Time   `json:"created_at"`
+}
+
+// ListWebhookDeliveriesParams filters ListDeliveries. Zero fields are not sent.
+type ListWebhookDeliveriesParams struct {
+	// Status is "success" or "failed".
+	Status string
+	// Limit is 1 to 200 (default 50).
+	Limit int
+}
+
+func (p *ListWebhookDeliveriesParams) values() url.Values {
+	q := newQuery()
+	if p == nil {
+		return q.values()
+	}
+	q.str("status", p.Status)
+	q.num("limit", p.Limit)
+	return q.values()
+}
+
+// ListDeliveries returns a subscription's recent delivery attempts, newest first.
+func (s *WebhooksService) ListDeliveries(ctx context.Context, id string, params *ListWebhookDeliveriesParams) ([]WebhookDelivery, error) {
+	var out []WebhookDelivery
+	if err := s.client.json(ctx, "GET", "/webhooks/"+url.PathEscape(id)+"/deliveries", nil, params.values(), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetDelivery returns one delivery attempt.
+func (s *WebhooksService) GetDelivery(ctx context.Context, id, deliveryID string) (*WebhookDelivery, error) {
+	out := &WebhookDelivery{}
+	path := "/webhooks/" + url.PathEscape(id) + "/deliveries/" + url.PathEscape(deliveryID)
+	if err := s.client.json(ctx, "GET", path, nil, nil, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Redeliver queues the delivery's event to be sent again, as a new attempt
+// under the same delivery key.
+func (s *WebhooksService) Redeliver(ctx context.Context, id, deliveryID string) error {
+	path := "/webhooks/" + url.PathEscape(id) + "/deliveries/" + url.PathEscape(deliveryID) + "/redeliver"
+	return s.client.Do(ctx, "POST", path, nil, nil, nil)
+}
+
 // Headers on every delivery FoPost sends, to a webhook or to a blog website URL.
 const (
 	// WebhookSignatureHeader is `sha256=<hex HMAC-SHA256(secret, body)>`.
