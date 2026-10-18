@@ -443,6 +443,7 @@ func (s *AdsService) ReserveReachFrequency(ctx context.Context, id string, body 
 }
 
 // CancelReachFrequency cancels a reservation. Needs `publish` as well as `ads`.
+// Wraps the API's `cancelReachFrequency` operation.
 func (s *AdsService) CancelReachFrequency(ctx context.Context, id string, body *ReachFrequencyActionRequest) (*ReachFrequencyPrediction, error) {
 	return s.reachFrequencyAction(ctx, id, "cancel", body)
 }
