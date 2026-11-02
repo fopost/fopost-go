@@ -13,6 +13,10 @@ All notable changes to this module are documented here. Releases are tags on `ma
 - `Inbox.GetXPost` and `Inbox.SearchXPosts` read X posts with a connected account's token (`GET /x/posts/{id}`, `GET /x/search`), with the `XPost`, `XSearchParams`, `XSearchMeta` and `XPostList` types; search pages through `Meta.NextToken`.
 - Existing X accounts must be reconnected for repost, bookmark and follow: the grant now asks for the bookmark and follow permissions, and an older token answers `409` `reconnect_required`. Every one of these calls is an X API call metered to the workspace; a spent X balance is a `402` `platform_balance_spent`.
 
+### Removed
+
+- The `Blog` service (`/v1/blog/*`: settings, website secret and test, destinations, keywords and articles) with its `BlogSettings`, `BlogKeyword`, `BlogArticle*` types and constants, `BlogArticlePublished`, and the `EventArticlePublished` and `EventArticleTest` constants. The API no longer serves them; articles are ordinary posts. `Blogs` (articles already on a connected site) is unchanged.
+
 ## 0.4.0 - 2026-10-18
 
 - `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
