@@ -16,7 +16,7 @@ import (
 
 const webhookTestSecret = "whsec_test"
 
-var webhookTestBody = []byte(`{"event":"article.published","data":{"id":"art_1","title":"Trail shoes","slug":"trail-shoes","bodyMarkdown":"# Trail shoes","bodyHtml":"<h1>Trail shoes</h1>","featuredImage":null,"images":[{"mediaId":"m_2","url":"https://cdn.yourbrand.com/2.jpg","alt":"Trail","position":1}],"tags":["gear"],"keyword":"trail shoes","wordCount":1200,"publishedAt":"2026-10-11T09:00:00.000Z","publishedUrl":"https://yourbrand.com/blog/trail-shoes"},"timestamp":"2026-10-11T09:00:01.000Z"}`)
+var webhookTestBody = []byte(`{"event":"post.published","data":{"id":"post_1","status":"published"},"timestamp":"2026-10-11T09:00:01.000Z"}`)
 
 func signWebhookTest(secret string, parts ...[]byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -32,7 +32,7 @@ func timestampedWebhookHeaders(body []byte, sentAt time.Time) http.Header {
 	headers.Set(WebhookTimestampHeader, ts)
 	headers.Set(WebhookTimestampedSignatureHeader, signWebhookTest(webhookTestSecret, []byte(ts+"."), body))
 	headers.Set(WebhookSignatureHeader, signWebhookTest(webhookTestSecret, body))
-	headers.Set(WebhookEventHeader, EventArticlePublished)
+	headers.Set(WebhookEventHeader, EventPostPublished)
 	return headers
 }
 
@@ -42,15 +42,18 @@ func TestVerifyWebhookAcceptsATimestampedSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifyWebhookAt: %v", err)
 	}
-	if envelope.Event != EventArticlePublished || envelope.Timestamp.Time.IsZero() {
+	if envelope.Event != EventPostPublished || envelope.Timestamp.Time.IsZero() {
 		t.Fatalf("envelope = %+v", envelope)
 	}
-	var article BlogArticlePublished
-	if err := envelope.Decode(&article); err != nil {
+	var post struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := envelope.Decode(&post); err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if article.ID != "art_1" || article.PublishedURL != "https://yourbrand.com/blog/trail-shoes" || *article.Images[0].Position != 1 || article.Images[0].MediaID != "m_2" || *article.Keyword != "trail shoes" {
-		t.Fatalf("article = %+v", article)
+	if post.ID != "post_1" || post.Status != "published" {
+		t.Fatalf("post = %+v", post)
 	}
 }
 
@@ -97,7 +100,7 @@ func TestVerifyWebhookFallsBackToTheBodySignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VerifyWebhook: %v", err)
 	}
-	if envelope.Event != EventArticlePublished {
+	if envelope.Event != EventPostPublished {
 		t.Fatalf("event = %q", envelope.Event)
 	}
 	headers.Set(WebhookSignatureHeader, "sha256=00")

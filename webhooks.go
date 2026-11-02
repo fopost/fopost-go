@@ -166,7 +166,7 @@ func (s *WebhooksService) Redeliver(ctx context.Context, id, deliveryID string) 
 	return s.client.Do(ctx, "POST", path, nil, nil, nil)
 }
 
-// Headers on every delivery FoPost sends, to a webhook or to a blog website URL.
+// Headers on every delivery FoPost sends to a webhook.
 const (
 	// WebhookSignatureHeader is `sha256=<hex HMAC-SHA256(secret, body)>`.
 	WebhookSignatureHeader = "X-FoPost-Signature"
@@ -205,26 +205,6 @@ func (e *WebhookEnvelope) Decode(out any) error {
 		return fmt.Errorf("fopost: decoding webhook data: %w", err)
 	}
 	return nil
-}
-
-// BlogArticlePublished is the Data of an EventArticlePublished delivery.
-// Image URLs stay fetchable for six hours; download and store your own copy.
-type BlogArticlePublished struct {
-	ID              string             `json:"id"`
-	Title           string             `json:"title"`
-	Slug            string             `json:"slug"`
-	Excerpt         *string            `json:"excerpt"`
-	MetaTitle       *string            `json:"metaTitle"`
-	MetaDescription *string            `json:"metaDescription"`
-	BodyMarkdown    string             `json:"bodyMarkdown"`
-	BodyHTML        string             `json:"bodyHtml"`
-	FeaturedImage   *BlogArticleImage  `json:"featuredImage"`
-	Images          []BlogArticleImage `json:"images"`
-	Tags            []string           `json:"tags"`
-	Keyword         *string            `json:"keyword"`
-	WordCount       int                `json:"wordCount"`
-	PublishedAt     Time               `json:"publishedAt"`
-	PublishedURL    string             `json:"publishedUrl"`
 }
 
 // VerifyWebhook checks a delivery against the secret and returns its
