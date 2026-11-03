@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWorkspacesListUnwrapsAndDecodesAccounts(t *testing.T) {
@@ -339,7 +340,10 @@ func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
 	page, err := client.Inbox.List(context.Background(), &ListInboxParams{
 		WorkspaceID: "ws_1",
 		Type:        InboxTypeComment,
-		Sort:        InboxSortUnanswered,
+		AccountIDs:  []string{"acc_1", "acc_2"},
+		Status:      InboxStatusUnanswered,
+		Since:       NewTime(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)),
+		Sort:        InboxSortOldest,
 		Page:        2,
 		PerPage:     20,
 	})
@@ -349,7 +353,7 @@ func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
 	if path != "/inbox" {
 		t.Fatalf("path = %q", path)
 	}
-	if query != "page=2&per_page=20&sort=unanswered&type=comment&workspace_id=ws_1" {
+	if query != "account_id=acc_1%2Cacc_2&page=2&per_page=20&since=2026-10-01T00%3A00%3A00Z&sort=oldest&status=unanswered&type=comment&workspace_id=ws_1" {
 		t.Fatalf("query = %q", query)
 	}
 	if len(page.Data) != 1 || page.Data[0].Account.Username != "yourbrand" || !page.Data[0].CanReply {

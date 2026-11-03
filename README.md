@@ -393,6 +393,10 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 
 `Activity.List` reads what happened in a workspace, newest first.
 
+The inbox lists (`Inbox.List`, `Threads`, `Conversations`) filter by `AccountIDs` (one or
+more connected accounts), `Status` (`InboxStatusUnanswered`, `InboxStatusReplied`,
+`InboxStatusResolved`) and `Since`, and sort `InboxSortNewest` or `InboxSortOldest`.
+
 On X an inbox item can also be reposted and bookmarked (`Inbox.Repost`, `Unrepost`, `Bookmark`,
 `Unbookmark`, where `CanRepost` and `CanBookmark` say so), an account can follow a user by
 numeric id (`Accounts.FollowXUser`, `UnfollowXUser`), and a post can be read or searched with

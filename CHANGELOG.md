@@ -4,6 +4,7 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 ## Unreleased
 
+- `ListInboxParams`, `ListInboxThreadsParams` and `ListInboxConversationsParams` gain `AccountIDs` (one or more accounts, sent comma-separated), `Status` (`InboxStatusUnanswered`, `InboxStatusReplied`, `InboxStatusResolved`) and `Since`.
 - `Ads.SendConversions(ctx, idempotencyKey, body)` sends conversions against a pixel exactly once (`POST /ads/conversions/events`, `Idempotency-Key` required) and answers a `ConversionUploadResult` (`ID`, `Accepted`, `EventCount`, `Replayed`). `Ads.ListConversionEvents` reads the stored `ConversionBatch` rows with their hashed events. The LinkedIn rule method keeps the `SendConversionEvents` name.
 - `ConversionEvent` gains `EventID`, `ActionSource` (`ConversionActionSource*`), `SourceURL`, `ExternalID`, `ClientIPAddress`, `ClientUserAgent`, `ClickID`, `BrowserID` and `ContentIDs`. `Ads.UploadConversions` keeps returning the accepted count.
 - Pixels: `Ads.ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats` and `GetEventMatchQuality`, with `AdPixelDetail`, `AdPixelStats`, `EventMatchQuality` and the `PixelDataUse*` constants.
@@ -15,6 +16,7 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 ### Removed
 
+- `Platform`, `AccountID`, `State` and `Q` on `ListInboxParams`, `ListInboxThreadsParams` and `ListInboxConversationsParams`, and the `InboxSortUnanswered` constant. The API no longer accepts `platform`, `q`, `state` or `sort=unanswered` on the inbox lists; use `AccountIDs` and `Status`.
 - The `Blog` service (`/v1/blog/*`: settings, website secret and test, destinations, keywords and articles) with its `BlogSettings`, `BlogKeyword`, `BlogArticle*` types and constants, `BlogArticlePublished`, and the `EventArticlePublished` and `EventArticleTest` constants. The API no longer serves them; articles are ordinary posts. `Blogs` (articles already on a connected site) is unchanged.
 
 ## 0.4.0 - 2026-10-18
