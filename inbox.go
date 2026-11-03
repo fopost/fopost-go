@@ -480,6 +480,28 @@ func (s *InboxService) MarkThreadRead(ctx context.Context, body *MarkInboxThread
 	return out.Updated, nil
 }
 
+// ResolveInboxRequest is the body of Resolve. Type is one of the InboxType
+// constants; AccountIDs and Before narrow which unanswered items it touches.
+type ResolveInboxRequest struct {
+	WorkspaceID string   `json:"workspace_id"`
+	Type        string   `json:"type"`
+	AccountIDs  []string `json:"account_id,omitempty"`
+	// Before keeps items the platform dates before it.
+	Before *Time `json:"before,omitempty"`
+}
+
+// Resolve marks every unanswered item of one type resolved and returns how
+// many changed. Nothing reaches a platform.
+func (s *InboxService) Resolve(ctx context.Context, body *ResolveInboxRequest) (int, error) {
+	var out struct {
+		Resolved int `json:"resolved"`
+	}
+	if err := s.client.json(ctx, "POST", "/inbox/resolve", body, nil, &out); err != nil {
+		return 0, err
+	}
+	return out.Resolved, nil
+}
+
 // InboxDMReconnect names an account whose DM access needs reconnecting.
 type InboxDMReconnect struct {
 	Platform string `json:"platform"`

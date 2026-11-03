@@ -4,6 +4,7 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 ## Unreleased
 
+- `Inbox.Resolve(ctx, *ResolveInboxRequest)` resolves every unanswered item of one type (`POST /inbox/resolve`), optionally only on `AccountIDs` or only items dated before `Before`, and returns how many changed.
 - `ListInboxParams`, `ListInboxThreadsParams` and `ListInboxConversationsParams` gain `AccountIDs` (one or more accounts, sent comma-separated), `Status` (`InboxStatusUnanswered`, `InboxStatusReplied`, `InboxStatusResolved`) and `Since`.
 - `Ads.SendConversions(ctx, idempotencyKey, body)` sends conversions against a pixel exactly once (`POST /ads/conversions/events`, `Idempotency-Key` required) and answers a `ConversionUploadResult` (`ID`, `Accepted`, `EventCount`, `Replayed`). `Ads.ListConversionEvents` reads the stored `ConversionBatch` rows with their hashed events. The LinkedIn rule method keeps the `SendConversionEvents` name.
 - `ConversionEvent` gains `EventID`, `ActionSource` (`ConversionActionSource*`), `SourceURL`, `ExternalID`, `ClientIPAddress`, `ClientUserAgent`, `ClickID`, `BrowserID` and `ContentIDs`. `Ads.UploadConversions` keeps returning the accepted count.

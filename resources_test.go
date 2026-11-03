@@ -364,6 +364,36 @@ func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
 	}
 }
 
+func TestInboxResolveSendsBodyAndReturnsCount(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"resolved":7}}`)
+	})
+
+	resolved, err := client.Inbox.Resolve(context.Background(), &ResolveInboxRequest{
+		WorkspaceID: "ws_1",
+		Type:        InboxTypeComment,
+		AccountIDs:  []string{"acc_1"},
+		Before:      NewTime(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Inbox.Resolve: %v", err)
+	}
+	if method != "POST" || path != "/inbox/resolve" {
+		t.Fatalf("request = %s %s", method, path)
+	}
+	ids, _ := body["account_id"].([]any)
+	if body["workspace_id"] != "ws_1" || body["type"] != "comment" || len(ids) != 1 || ids[0] != "acc_1" || body["before"] != "2026-10-01T00:00:00Z" {
+		t.Fatalf("body = %v", body)
+	}
+	if resolved != 7 {
+		t.Fatalf("resolved = %d", resolved)
+	}
+}
+
 func TestInboxMarkThreadReadSendsSnakeCaseBody(t *testing.T) {
 	var method, path string
 	var body map[string]any
