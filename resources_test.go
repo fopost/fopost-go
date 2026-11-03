@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWorkspacesListUnwrapsAndDecodesAccounts(t *testing.T) {
@@ -339,7 +340,10 @@ func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
 	page, err := client.Inbox.List(context.Background(), &ListInboxParams{
 		WorkspaceID: "ws_1",
 		Type:        InboxTypeComment,
-		Sort:        InboxSortUnanswered,
+		AccountIDs:  []string{"acc_1", "acc_2"},
+		Status:      InboxStatusUnanswered,
+		Since:       NewTime(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)),
+		Sort:        InboxSortOldest,
 		Page:        2,
 		PerPage:     20,
 	})
@@ -349,7 +353,7 @@ func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
 	if path != "/inbox" {
 		t.Fatalf("path = %q", path)
 	}
-	if query != "page=2&per_page=20&sort=unanswered&type=comment&workspace_id=ws_1" {
+	if query != "account_id=acc_1%2Cacc_2&page=2&per_page=20&since=2026-10-01T00%3A00%3A00Z&sort=oldest&status=unanswered&type=comment&workspace_id=ws_1" {
 		t.Fatalf("query = %q", query)
 	}
 	if len(page.Data) != 1 || page.Data[0].Account.Username != "yourbrand" || !page.Data[0].CanReply {
@@ -357,6 +361,36 @@ func TestInboxListSendsFiltersAndKeepsMeta(t *testing.T) {
 	}
 	if page.Meta.Page != 2 || page.Meta.PerPage != 20 || page.Meta.Total != 41 {
 		t.Fatalf("meta = %+v", page.Meta)
+	}
+}
+
+func TestInboxResolveSendsBodyAndReturnsCount(t *testing.T) {
+	var method, path string
+	var body map[string]any
+	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = io.WriteString(w, `{"data":{"resolved":7}}`)
+	})
+
+	resolved, err := client.Inbox.Resolve(context.Background(), &ResolveInboxRequest{
+		WorkspaceID: "ws_1",
+		Type:        InboxTypeComment,
+		AccountIDs:  []string{"acc_1"},
+		Before:      NewTime(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)),
+	})
+	if err != nil {
+		t.Fatalf("Inbox.Resolve: %v", err)
+	}
+	if method != "POST" || path != "/inbox/resolve" {
+		t.Fatalf("request = %s %s", method, path)
+	}
+	ids, _ := body["account_id"].([]any)
+	if body["workspace_id"] != "ws_1" || body["type"] != "comment" || len(ids) != 1 || ids[0] != "acc_1" || body["before"] != "2026-10-01T00:00:00Z" {
+		t.Fatalf("body = %v", body)
+	}
+	if resolved != 7 {
+		t.Fatalf("resolved = %d", resolved)
 	}
 }
 

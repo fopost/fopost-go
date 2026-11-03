@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // InboxService covers the social inbox: comments, mentions, reviews and DMs read from
@@ -29,11 +30,18 @@ const (
 	InboxStateSnoozed  = "snoozed"
 )
 
+// Inbox status filters for the list calls. A reply also resolves an item, so
+// the three never overlap.
+const (
+	InboxStatusUnanswered = "unanswered"
+	InboxStatusReplied    = "replied"
+	InboxStatusResolved   = "resolved"
+)
+
 // Inbox sort orders.
 const (
-	InboxSortNewest     = "newest"
-	InboxSortOldest     = "oldest"
-	InboxSortUnanswered = "unanswered"
+	InboxSortNewest = "newest"
+	InboxSortOldest = "oldest"
 )
 
 // Inbox thread kinds for Threads.
@@ -280,10 +288,12 @@ type ListInboxParams struct {
 	WorkspaceID string
 	// Type is one of the InboxType constants.
 	Type string
-	// State is one of the InboxState constants.
-	State     string
-	Platform  string
-	AccountID string
+	// AccountIDs narrows to one or more connected accounts.
+	AccountIDs []string
+	// Status is one of the InboxStatus constants.
+	Status string
+	// Since keeps items the platform dates at or after it.
+	Since *Time
 	// PostID narrows to comments under one FoPost post.
 	PostID string
 	// PostExternalID narrows to comments under one platform post, including
@@ -293,7 +303,6 @@ type ListInboxParams struct {
 	ConversationID string
 	// Direction is "inbound" or "outbound".
 	Direction string
-	Q         string
 	// Sort is one of the InboxSort constants.
 	Sort    string
 	Page    int
@@ -307,14 +316,13 @@ func (p *ListInboxParams) values() url.Values {
 	}
 	q.str("workspace_id", p.WorkspaceID)
 	q.str("type", p.Type)
-	q.str("state", p.State)
-	q.str("platform", p.Platform)
-	q.str("account_id", p.AccountID)
+	q.str("account_id", strings.Join(p.AccountIDs, ","))
+	q.str("status", p.Status)
+	q.time("since", p.Since)
 	q.str("post_id", p.PostID)
 	q.str("post_external_id", p.PostExternalID)
 	q.str("conversation_id", p.ConversationID)
 	q.str("direction", p.Direction)
-	q.str("q", p.Q)
 	q.str("sort", p.Sort)
 	q.num("page", p.Page)
 	q.num("per_page", p.PerPage)
@@ -327,12 +335,13 @@ type ListInboxThreadsParams struct {
 	WorkspaceID string
 	// Kind is InboxThreadsComments (the default) for threads under the
 	// workspace's own posts, or InboxThreadsMentions for posts it was tagged in.
-	Kind      string
-	Platform  string
-	AccountID string
-	// State is one of the InboxState constants.
-	State string
-	Q     string
+	Kind string
+	// AccountIDs narrows to one or more connected accounts.
+	AccountIDs []string
+	// Status is one of the InboxStatus constants.
+	Status string
+	// Since keeps items the platform dates at or after it.
+	Since *Time
 	// Sort is one of the InboxSort constants.
 	Sort    string
 	Page    int
@@ -346,10 +355,9 @@ func (p *ListInboxThreadsParams) values() url.Values {
 	}
 	q.str("workspace_id", p.WorkspaceID)
 	q.str("kind", p.Kind)
-	q.str("platform", p.Platform)
-	q.str("account_id", p.AccountID)
-	q.str("state", p.State)
-	q.str("q", p.Q)
+	q.str("account_id", strings.Join(p.AccountIDs, ","))
+	q.str("status", p.Status)
+	q.time("since", p.Since)
 	q.str("sort", p.Sort)
 	q.num("page", p.Page)
 	q.num("per_page", p.PerPage)
@@ -360,11 +368,12 @@ func (p *ListInboxThreadsParams) values() url.Values {
 // fields are not sent.
 type ListInboxConversationsParams struct {
 	WorkspaceID string
-	Platform    string
-	AccountID   string
-	// State is one of the InboxState constants.
-	State string
-	Q     string
+	// AccountIDs narrows to one or more connected accounts.
+	AccountIDs []string
+	// Status is one of the InboxStatus constants.
+	Status string
+	// Since keeps items the platform dates at or after it.
+	Since *Time
 	// Sort is one of the InboxSort constants.
 	Sort    string
 	Page    int
@@ -377,10 +386,9 @@ func (p *ListInboxConversationsParams) values() url.Values {
 		return q.values()
 	}
 	q.str("workspace_id", p.WorkspaceID)
-	q.str("platform", p.Platform)
-	q.str("account_id", p.AccountID)
-	q.str("state", p.State)
-	q.str("q", p.Q)
+	q.str("account_id", strings.Join(p.AccountIDs, ","))
+	q.str("status", p.Status)
+	q.time("since", p.Since)
 	q.str("sort", p.Sort)
 	q.num("page", p.Page)
 	q.num("per_page", p.PerPage)
@@ -470,6 +478,28 @@ func (s *InboxService) MarkThreadRead(ctx context.Context, body *MarkInboxThread
 		return 0, err
 	}
 	return out.Updated, nil
+}
+
+// ResolveInboxRequest is the body of Resolve. Type is one of the InboxType
+// constants; AccountIDs and Before narrow which unanswered items it touches.
+type ResolveInboxRequest struct {
+	WorkspaceID string   `json:"workspace_id"`
+	Type        string   `json:"type"`
+	AccountIDs  []string `json:"account_id,omitempty"`
+	// Before keeps items the platform dates before it.
+	Before *Time `json:"before,omitempty"`
+}
+
+// Resolve marks every unanswered item of one type resolved and returns how
+// many changed. Nothing reaches a platform.
+func (s *InboxService) Resolve(ctx context.Context, body *ResolveInboxRequest) (int, error) {
+	var out struct {
+		Resolved int `json:"resolved"`
+	}
+	if err := s.client.json(ctx, "POST", "/inbox/resolve", body, nil, &out); err != nil {
+		return 0, err
+	}
+	return out.Resolved, nil
 }
 
 // InboxDMReconnect names an account whose DM access needs reconnecting.
