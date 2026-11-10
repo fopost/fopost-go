@@ -850,19 +850,21 @@ type BulkImportResult struct {
 	} `json:"posts"`
 }
 
-// ValidateBulkImport checks a CSV without creating anything.
-func (s *PostsService) ValidateBulkImport(ctx context.Context, workspaceID, filename string, csv io.Reader) (*BulkImportValidation, error) {
+// ValidateBulkImport checks a CSV without creating anything. Accounts (ids or
+// platform names) apply to rows whose own accounts cell is empty.
+func (s *PostsService) ValidateBulkImport(ctx context.Context, workspaceID, filename string, csv io.Reader, accounts ...string) (*BulkImportValidation, error) {
 	out := &BulkImportValidation{}
-	if err := s.uploadCSV(ctx, "/posts/bulk-import/validate", workspaceID, filename, csv, out); err != nil {
+	if err := s.uploadCSV(ctx, "/posts/bulk-import/validate", workspaceID, filename, csv, accounts, out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// CommitBulkImport creates the posts a CSV describes.
-func (s *PostsService) CommitBulkImport(ctx context.Context, workspaceID, filename string, csv io.Reader) (*BulkImportResult, error) {
+// CommitBulkImport creates the posts a CSV describes. Accounts (ids or
+// platform names) apply to rows whose own accounts cell is empty.
+func (s *PostsService) CommitBulkImport(ctx context.Context, workspaceID, filename string, csv io.Reader, accounts ...string) (*BulkImportResult, error) {
 	out := &BulkImportResult{}
-	if err := s.uploadCSV(ctx, "/posts/bulk-import/commit", workspaceID, filename, csv, out); err != nil {
+	if err := s.uploadCSV(ctx, "/posts/bulk-import/commit", workspaceID, filename, csv, accounts, out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -877,14 +879,18 @@ func (s *PostsService) RollbackBulkImport(ctx context.Context, batchID string) (
 	return out, nil
 }
 
-func (s *PostsService) uploadCSV(ctx context.Context, path, workspaceID, filename string, csv io.Reader, out any) error {
+func (s *PostsService) uploadCSV(ctx context.Context, path, workspaceID, filename string, csv io.Reader, accounts []string, out any) error {
 	if workspaceID == "" {
 		return fmt.Errorf("fopost: a workspace id is required")
 	}
 	if filename == "" {
 		filename = "posts.csv"
 	}
-	form, err := buildMultipart(map[string]string{"workspace_id": workspaceID}, []fileField{
+	fields := map[string]string{"workspace_id": workspaceID}
+	if len(accounts) > 0 {
+		fields["accounts"] = strings.Join(accounts, ",")
+	}
+	form, err := buildMultipart(fields, []fileField{
 		{field: "file", filename: filename, reader: csv},
 	})
 	if err != nil {

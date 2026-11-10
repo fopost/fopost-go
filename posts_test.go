@@ -229,12 +229,14 @@ func TestDeliveriesUnwrapsTheEnvelope(t *testing.T) {
 
 func TestBulkImportPostsMultipart(t *testing.T) {
 	var contentType, workspaceID, filename, contents string
+	var accounts []string
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		contentType = r.Header.Get("Content-Type")
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
 			t.Errorf("ParseMultipartForm: %v", err)
 		}
 		workspaceID = r.FormValue("workspace_id")
+		accounts = r.MultipartForm.Value["accounts"]
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			t.Errorf("FormFile: %v", err)
@@ -258,6 +260,16 @@ func TestBulkImportPostsMultipart(t *testing.T) {
 	}
 	if validation.ValidRows != 1 {
 		t.Fatalf("validation = %+v", validation)
+	}
+	if accounts != nil {
+		t.Fatalf("accounts = %q, want it omitted", accounts)
+	}
+
+	if _, err := client.Posts.CommitBulkImport(context.Background(), "ws_1", "posts.csv", strings.NewReader("content\nHello\n"), "twitter", "linkedin"); err != nil {
+		t.Fatalf("CommitBulkImport: %v", err)
+	}
+	if len(accounts) != 1 || accounts[0] != "twitter,linkedin" {
+		t.Fatalf("accounts = %q, want twitter,linkedin", accounts)
 	}
 }
 
