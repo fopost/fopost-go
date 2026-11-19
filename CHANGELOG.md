@@ -4,6 +4,15 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 ## Unreleased
 
+## 0.4.0 - 2026-11-19
+
+- `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
+- `Posts.Unpublish` takes a live post down on every network (`POST /posts/{id}/unpublish`, needs `publish`), answering `UnpublishResult`; `PostStatusUnpublished`.
+- `ConnectSessions` service for hosted connect links: `Create` and `Get`, with `ConnectSession` and the `ConnectSession*` status constants.
+- `Webhooks.ListDeliveries`, `Webhooks.GetDelivery` and `Webhooks.Redeliver` read and replay the delivery log, with the `WebhookDelivery` type.
+- `Automations.ListVersions`, `Automations.GetVersion` and `Automations.RestoreVersion` walk and restore an automation's saved graphs, with `AutomationVersion`, `AutomationVersionSummary`, `RestoredAutomationVersion`, `WorkflowGraph`, `WorkflowNode` and `WorkflowEdge`.
+- `Logs` service: `List` reads recent API activity with its summary and cursor (`GET /logs`, needs `workspaces`).
+- `Analytics.Inbox` reads the inbox roll-up (`GET /analytics/inbox`).
 - `Posts.ValidateBulkImport` and `Posts.CommitBulkImport` take optional trailing `accounts ...string` (account ids or platform names), sent comma-separated and applied to every CSV row whose own `accounts` cell is empty.
 - `Inbox.Resolve(ctx, *ResolveInboxRequest)` resolves every unanswered item of one type (`POST /inbox/resolve`), optionally only on `AccountIDs` or only items dated before `Before`, and returns how many changed.
 - `ListInboxParams`, `ListInboxThreadsParams` and `ListInboxConversationsParams` gain `AccountIDs` (one or more accounts, sent comma-separated), `Status` (`InboxStatusUnanswered`, `InboxStatusReplied`, `InboxStatusResolved`) and `Since`.
@@ -20,16 +29,6 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 - `Platform`, `AccountID`, `State` and `Q` on `ListInboxParams`, `ListInboxThreadsParams` and `ListInboxConversationsParams`, and the `InboxSortUnanswered` constant. The API no longer accepts `platform`, `q`, `state` or `sort=unanswered` on the inbox lists; use `AccountIDs` and `Status`.
 - The `Blog` service (`/v1/blog/*`: settings, website secret and test, destinations, keywords and articles) with its `BlogSettings`, `BlogKeyword`, `BlogArticle*` types and constants, `BlogArticlePublished`, and the `EventArticlePublished` and `EventArticleTest` constants. The API no longer serves them; articles are ordinary posts. `Blogs` (articles already on a connected site) is unchanged.
-
-## 0.4.0 - 2026-10-18
-
-- `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
-- `Posts.Unpublish` takes a live post down on every network (`POST /posts/{id}/unpublish`, needs `publish`), answering `UnpublishResult`; `PostStatusUnpublished`.
-- `ConnectSessions` service for hosted connect links: `Create` and `Get`, with `ConnectSession` and the `ConnectSession*` status constants.
-- `Webhooks.ListDeliveries`, `Webhooks.GetDelivery` and `Webhooks.Redeliver` read and replay the delivery log, with the `WebhookDelivery` type.
-- `Automations.ListVersions`, `Automations.GetVersion` and `Automations.RestoreVersion` walk and restore an automation's saved graphs, with `AutomationVersion`, `AutomationVersionSummary`, `RestoredAutomationVersion`, `WorkflowGraph`, `WorkflowNode` and `WorkflowEdge`.
-- `Logs` service: `List` reads recent API activity with its summary and cursor (`GET /logs`, needs `workspaces`).
-- `Analytics.Inbox` reads the inbox roll-up (`GET /analytics/inbox`).
 
 ## 0.3.0 - 2026-10-18
 
