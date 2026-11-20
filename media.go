@@ -246,3 +246,21 @@ func (s *MediaService) UploadDirect(ctx context.Context, input *PresignInput, co
 func (s *MediaService) Delete(ctx context.Context, id string) error {
 	return s.client.Do(ctx, "DELETE", "/media/"+url.PathEscape(id), nil, nil, nil)
 }
+
+// GeneratedAltText is what GenerateAltText answers. It is also saved on the asset.
+type GeneratedAltText struct {
+	AltText string `json:"alt_text"`
+	// AltTextSource is "ai".
+	AltTextSource string   `json:"alt_text_source"`
+	Tags          []string `json:"tags"`
+}
+
+// GenerateAltText writes alt text for an image asset and saves it. Uses AI
+// credits and needs the ai scope.
+func (s *MediaService) GenerateAltText(ctx context.Context, id string) (*GeneratedAltText, error) {
+	var out GeneratedAltText
+	if err := s.client.json(ctx, "POST", "/media/"+url.PathEscape(id)+"/alt-text", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

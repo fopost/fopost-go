@@ -374,7 +374,7 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Webhooks`    | `List`, `Create`, `Update`, `Delete`, `Test`, `ListDeliveries`, `GetDelivery`, `Redeliver`                                                                        |
 | `Analytics`   | `Overview`, `TimeSeries`, `TopPosts`, `Labels`, `PostsTable`, `PostingStreak`, `Demographics`, `Collect`, `Decay`, `Frequency`, `Timeline`, `Changes`, `CollectPost`, `NativePosts`, `Inbox` |
 | `Automations` | `List`, `Get`, `Create`, `Update`, `Delete`, `Toggle`, `Runs`, `Run`, `Trigger`, `Stats`, `ListVersions`, `GetVersion`, `RestoreVersion`                           |
-| `Media`       | `List`, `Limits`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`                                                                                               |
+| `Media`       | `List`, `Limits`, `Upload`, `Presign`, `Complete`, `UploadDirect`, `Delete`, `GenerateAltText`                                                                                               |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Resolve`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Repost`, `Unrepost`, `Bookmark`, `Unbookmark`, `Vote`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `Handover`, `ListApprovals`, `ApproveReply`, `RejectReply`, `GetXPost`, `SearchXPosts` |
 | `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
 | `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |
@@ -390,6 +390,24 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Queue`       | `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next`, `Preview`                                                                                          |
 | `ConnectSessions` | `Create`, `Get`                                                                                                                                               |
 | `Logs`        | `List`                                                                                                                                                            |
+| `Designs`     | `List`, `Create`, `Get`, `Update`, `Delete`, `ListVersions`, `RestoreVersion`, `Duplicate`, `Export`, `Bulk`, `Posts`, `TextToSlides`, `FromPost`                 |
+| `Fonts`       | `List`, `Upload`, `Delete`                                                                                                                                        |
+| `VideoEdits`  | `Ops`, `List`, `Create`, `Get`                                                                                                                                    |
+
+A design's `Document` is the editor document as a plain `DesignDocument` map, passed
+through untouched. `Designs.Export` renders pages into the media library. A video edit runs
+in the background: `VideoEdits.Create` returns a queued job, and `Get` reports it until
+`Status` is `VideoEditSucceeded` or `VideoEditFailed`. `Designs.TextToSlides` and
+`Media.GenerateAltText` use AI credits and need the `ai` scope.
+
+```go
+job, err := client.VideoEdits.Create(ctx, &fopost.CreateVideoEditRequest{
+    MediaID: mediaID,
+    Operations: []fopost.VideoEditOperation{
+        {Op: "trim", Params: map[string]any{"start": 2, "end": 12}},
+    },
+})
+```
 
 `Activity.List` reads what happened in a workspace, newest first.
 

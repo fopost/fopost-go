@@ -1555,3 +1555,17 @@ func TestAutomationVersionsRoundTrip(t *testing.T) {
 		t.Fatalf("restored = %+v", restored)
 	}
 }
+
+func TestMediaGenerateAltText(t *testing.T) {
+	client, got := captureClient(t, 200, `{"alt_text":"A red bicycle against a brick wall","alt_text_source":"ai","tags":["bicycle","street"]}`)
+	out, err := client.Media.GenerateAltText(context.Background(), "med_1")
+	if err != nil {
+		t.Fatalf("Media.GenerateAltText: %v", err)
+	}
+	if got.method != "POST" || got.path != "/media/med_1/alt-text" {
+		t.Fatalf("request = %+v", got)
+	}
+	if out.AltText != "A red bicycle against a brick wall" || out.AltTextSource != "ai" || len(out.Tags) != 2 {
+		t.Fatalf("alt text = %+v", out)
+	}
+}

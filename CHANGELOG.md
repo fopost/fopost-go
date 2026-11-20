@@ -4,6 +4,11 @@ All notable changes to this module are documented here. Releases are tags on `ma
 
 ## Unreleased
 
+- `Designs` service: `List`, `Create`, `Get`, `Update`, `Delete`, `ListVersions`, `RestoreVersion`, `Duplicate`, `Export`, `Bulk`, `Posts`, `TextToSlides` and `FromPost` (`/designs`, needs `posts`; `TextToSlides` also needs `ai`), with `Design`, `DesignDocument`, `DesignVersion`, `DesignUpdate`, `DesignExport`, `DesignPost`, `SlidesOutline` and the `DesignKind*`, `DesignExport*` and `DesignFromPost*` constants. `Update` and `RestoreVersion` return the version saved beside the design.
+- `Fonts` service: `List` reads the font library and a workspace's uploads, `Upload` sends one font file as a multipart form, `Delete` removes an upload (`/fonts`, needs `posts`).
+- `VideoEdits` service: `Ops`, `List`, `Create` and `Get` for background edit jobs on a video (`/video-edits`, needs `posts`), with `VideoEdit`, `VideoEditOperation` and the `VideoEdit*` status constants.
+- `Media.GenerateAltText` writes and saves alt text for an asset (`POST /media/{id}/alt-text`, needs `ai`), answering `GeneratedAltText`.
+
 ## 0.4.0 - 2026-11-19
 
 - `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
