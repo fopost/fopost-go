@@ -77,8 +77,9 @@ type Client struct {
 	GoogleBusiness *GoogleBusinessService
 	Blogs          *BlogsService
 
-	Designs *DesignsService
-	Fonts   *FontsService
+	Designs    *DesignsService
+	Fonts      *FontsService
+	VideoEdits *VideoEditsService
 }
 
 // Option configures a Client.
@@ -186,6 +187,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.Blogs = &BlogsService{client: c}
 	c.Designs = &DesignsService{client: c}
 	c.Fonts = &FontsService{client: c}
+	c.VideoEdits = &VideoEditsService{client: c}
 
 	return c, nil
 }
