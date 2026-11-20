@@ -78,6 +78,7 @@ type Client struct {
 	Blogs          *BlogsService
 
 	Designs *DesignsService
+	Fonts   *FontsService
 }
 
 // Option configures a Client.
@@ -184,6 +185,7 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	c.WhatsApp = &WhatsAppService{client: c}
 	c.Blogs = &BlogsService{client: c}
 	c.Designs = &DesignsService{client: c}
+	c.Fonts = &FontsService{client: c}
 
 	return c, nil
 }
