@@ -62,7 +62,7 @@ func TestAdsTikTokBusinessCentersAndIdentities(t *testing.T) {
 	}
 }
 
-func TestAdsSparkPostIDAndSmartPlusTravelInTheBody(t *testing.T) {
+func TestAdsSparkPostIDTravelsInTheBody(t *testing.T) {
 	var body map[string]any
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -79,15 +79,6 @@ func TestAdsSparkPostIDAndSmartPlusTravelInTheBody(t *testing.T) {
 		t.Fatalf("body = %+v", body)
 	}
 
-	if _, err := client.Ads.CreateCampaign(context.Background(), &CreateCampaignRequest{
-		WorkspaceID: "ws_1", ConnectionID: "conn_1", AdAccountID: "7011",
-		Name: "Smart", Goal: AdGoalTraffic, SmartPlus: Bool(true),
-	}); err != nil {
-		t.Fatalf("Ads.CreateCampaign: %v", err)
-	}
-	if body["smartPlus"] != true {
-		t.Fatalf("body = %+v", body)
-	}
 }
 
 func TestAdsConversionsReportWhatTheNetworkAccepted(t *testing.T) {

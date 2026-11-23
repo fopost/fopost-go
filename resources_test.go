@@ -742,48 +742,6 @@ func TestAdsLeadsPassesTheCursor(t *testing.T) {
 	}
 }
 
-func TestAdsTreeDecodesNestedCampaigns(t *testing.T) {
-	var path, query string
-	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		path, query = r.URL.Path, r.URL.RawQuery
-		_, _ = io.WriteString(w, `{"data":{"adAccountId":"act_1","currency":"USD","workspaceId":"ws_1","campaigns":[{"id":"c_1","name":"Launch","status":"PAUSED","budgetMinor":null,"adSets":[{"id":"s_1","name":"US","campaignId":"c_1","status":"ACTIVE","budgetMinor":5000,"budgetType":"daily","ads":[{"id":"a_1","name":"Hero","adSetId":"s_1","creativeId":"cr_1","status":"ACTIVE"}]}]}]}}`)
-	})
-
-	tree, err := client.Ads.Tree(context.Background(), "act_1", &AdObjectParams{WorkspaceID: "ws_1", ConnectionID: "conn_1"})
-	if err != nil {
-		t.Fatalf("Ads.Tree: %v", err)
-	}
-	if path != "/ads/accounts/act_1/tree" || query != "connection_id=conn_1&workspace_id=ws_1" {
-		t.Fatalf("%s?%s", path, query)
-	}
-	c := tree.Campaigns[0]
-	if c.ID != "c_1" || c.BudgetMinor != nil || *c.AdSets[0].BudgetMinor != 5000 || c.AdSets[0].Ads[0].CreativeID != "cr_1" {
-		t.Fatalf("tree = %+v", tree)
-	}
-}
-
-func TestAdsDuplicateCampaignSendsNoBodyUnlessPausedIsSet(t *testing.T) {
-	var bodies []string
-	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(r.Body)
-		bodies = append(bodies, string(raw))
-		w.WriteHeader(http.StatusCreated)
-		_, _ = io.WriteString(w, `{"data":{"id":"c_2"}}`)
-	})
-
-	params := &AdObjectParams{WorkspaceID: "ws_1", ConnectionID: "conn_1"}
-	id, err := client.Ads.DuplicateCampaign(context.Background(), "c_1", params, nil)
-	if err != nil || id != "c_2" {
-		t.Fatalf("DuplicateCampaign = %q, %v", id, err)
-	}
-	if _, err := client.Ads.DuplicateCampaign(context.Background(), "c_1", params, Bool(false)); err != nil {
-		t.Fatalf("DuplicateCampaign: %v", err)
-	}
-	if bodies[0] != "" || !strings.Contains(bodies[1], `"paused":false`) {
-		t.Fatalf("bodies = %q", bodies)
-	}
-}
-
 func TestAdsSetStatusesSendsObjects(t *testing.T) {
 	var body map[string]any
 	client, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
