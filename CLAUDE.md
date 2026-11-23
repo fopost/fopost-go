@@ -94,8 +94,7 @@ for concurrent use.
   inbox lists use, so it has its own `ContactPageMeta`. `CreateField` puts the workspace on
   the query string because the handler reads it from there.
 - Scopes: one per service, named after it. `Validate` needs `posts`; `Inbox` needs `inbox`; `Ads` needs `ads`, and
-  `Ads.Boost`/`Create`/`SetStatus`/`Delete`/`SetStatuses` and the create/update/delete/duplicate
-  calls on campaigns, ad sets and network ads also need `publish` because they spend money.
+  `Ads.Boost`/`Create`/`SetStatus`/`Delete`/`SetStatuses` also need `publish` because they spend money.
   `Inbox.EditComment`/`Like`/`Unlike`/`Repost`/`Unrepost`/`Bookmark`/`Unbookmark`/`Pin`/`Unpin`/`React`/`StartConversation`/`SetTyping`,
   `ReplyWith` carrying media or quick replies, and deleting our own reply also need `publish`.
   `Accounts.FollowXUser`/`UnfollowXUser` need `inbox` and `publish`, not `accounts`;

@@ -379,10 +379,10 @@ if _, err := client.Posts.Publish(ctx, postID, nil); err != nil {
 | `Contacts`    | `List`, `Get`, `Create`, `Update`, `Delete`, `Conversations`, `Import`, `ListFields`, `CreateField`, `UpdateField`, `DeleteField`, `ConversationAnalytics` |
 | `Broadcasts`  | `List`, `Get`, `Create`, `Update`, `Delete`, `Send`, `Cancel`, `Recipients` |
 | `Sequences`   | `List`, `Get`, `Create`, `Update`, `Delete`, `Enroll`, `Unenroll`, `Enrollments` |
-| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `Goals`, `Catalogs`, `CreateCatalog`, `Catalog`, `UpdateCatalog`, `DeleteCatalog`, `CatalogProducts`, `WriteCatalogProducts`, `ProductFeeds`, `CreateProductFeed`, `DeleteProductFeed`, `FeedUploads`, `StartFeedUpload`, `ProductSets`, `CreateProductSet`, `UpdateProductSet`, `DeleteProductSet`, `ReachFrequency`, `CreateReachFrequency`, `ReachFrequencyPredictionByID`, `ReserveReachFrequency`, `CancelReachFrequency`, `Library`, `PartnershipCreators`, `RequestPartnership`, `RevokePartnership`, `AccountActivity`, `Labels`, `CreateLabel`, `UpdateLabel`, `DeleteLabel`, `ApplyLabel`, `Studies`, `CreateStudy`, `Study`, `DeleteStudy`, `IosCampaignLimits`, `HighDemandPeriods`, `CreateHighDemandPeriod`, `DeleteHighDemandPeriod`, `ValueRuleSets`, `CreateValueRuleSet`, `DeleteValueRuleSet` |
+| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `AuthorizeMeta`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `SetStatuses`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `Goals`, `ReachFrequency`, `CreateReachFrequency`, `ReachFrequencyPredictionByID`, `ReserveReachFrequency`, `CancelReachFrequency`, `PartnershipCreators`, `RequestPartnership`, `RevokePartnership`, `AccountActivity`, `Labels`, `CreateLabel`, `UpdateLabel`, `DeleteLabel`, `ApplyLabel`, `Studies`, `CreateStudy`, `Study`, `DeleteStudy`, `IosCampaignLimits`, `HighDemandPeriods`, `CreateHighDemandPeriod`, `DeleteHighDemandPeriod`, `ValueRuleSets`, `CreateValueRuleSet`, `DeleteValueRuleSet` |
 | `Knowledge`   | `List`, `Create`, `Update`, `Delete`, `Sync`, `Search`                                                                                                           |
 | `Inbox`       | `List`, `Threads`, `Conversations`, `UnreadCount`, `Accounts`, `Platforms`, `MarkThreadRead`, `Resolve`, `Refresh`, `Update`, `EditComment`, `Reply`, `ReplyWith`, `Hide`, `Unhide`, `Delete`, `Like`, `Unlike`, `Repost`, `Unrepost`, `Bookmark`, `Unbookmark`, `Vote`, `Pin`, `Unpin`, `React`, `StartConversation`, `SetTyping`, `ListApprovals`, `ApproveReply`, `RejectReply`, `GetXPost`, `SearchXPosts` |
-| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `Providers`, `Authorize`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `Tree`, `CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`, `SetStatuses`, `Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `AddAudienceCompanies`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `BidPricing`, `SupplyForecast`, `ConversionRules`, `CreateConversionRule`, `ConversionRule`, `UpdateConversionRule`, `DeleteConversionRule`, `AttachConversionRule`, `DetachConversionRule`, `ConversionMetrics`, `SendConversionEvents`, `SendConversions`, `ListConversionEvents`, `ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats`, `GetEventMatchQuality`, `ListCustomConversions`, `CreateCustomConversion`, `GetCustomConversion`, `UpdateCustomConversion`, `DeleteCustomConversion` |
+| `Ads`         | `List`, `External`, `Boostable`, `Connections`, `Sources`, `Providers`, `Authorize`, `DeleteConnection`, `Boost`, `Create`, `Refresh`, `SetStatus`, `Delete`, `Audiences`, `CreateAudience`, `SearchTargeting`, `LeadForms`, `CreateLeadForm`, `Leads`, `SetStatuses`, `Audience`, `UpdateAudience`, `DeleteAudience`, `AddAudienceUsers`, `AddAudienceCompanies`, `EstimateReach`, `Insights`, `AdInsights`, `LeadForm`, `ArchiveLeadForm`, `LeadsFeed`, `LeadPages`, `SubscribeLeadPage`, `UnsubscribeLeadPage`, `BidPricing`, `SupplyForecast`, `ConversionRules`, `CreateConversionRule`, `ConversionRule`, `UpdateConversionRule`, `DeleteConversionRule`, `AttachConversionRule`, `DetachConversionRule`, `ConversionMetrics`, `SendConversionEvents`, `SendConversions`, `ListConversionEvents`, `ListPixels`, `CreatePixel`, `GetPixel`, `UpdatePixel`, `SharePixel`, `GetPixelStats`, `GetEventMatchQuality`, `ListCustomConversions`, `CreateCustomConversion`, `GetCustomConversion`, `UpdateCustomConversion`, `DeleteCustomConversion` |
 | `GoogleBusiness` | `GetLocation`, `UpdateLocation`, `GetAttributes`, `UpdateAttributes`, `GetMenus`, `ReplaceMenus`, `GetServices`, `ReplaceServices`, `ListMedia`, `AddMedia`, `DeleteMedia`, `ListPlaceActions`, `CreatePlaceAction`, `UpdatePlaceAction`, `DeletePlaceAction`, `GetVerificationOptions`, `StartVerification`, `CompleteVerification`, `GetPerformance`, `GetSearchKeywords`, `Assign` |
 | `Validate`    | `Post`, `Length`, `Media`, `Subreddit` |
 | `Activity`    | `List`                                                                                                                                                            |
@@ -519,10 +519,9 @@ func handle(w http.ResponseWriter, r *http.Request) {
 Requests send `X-API-Key`. A key carries only the scopes granted when it was
 created: `posts` (which also covers publishing, deliveries, media, and `Validate`),
 `workspaces`, `accounts` (which also covers `AccountGroups`), `labels`, `webhooks`, `analytics`, `automations`, `inbox`
-(which also covers `Knowledge`), `ads`, `ai`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete`, `Ads.SetStatuses`
-and the create, update, delete and duplicate calls on campaigns, ad sets and
-network ads spend money and need `publish` as well as `ads`; a boost, ad or new
-campaign object starts paused unless `Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
+(which also covers `Knowledge`), `ads`, `ai`. `Ads.Boost`, `Ads.Create`, `Ads.SetStatus`, `Ads.Delete` and `Ads.SetStatuses`
+spend money and need `publish` as well as `ads`; a boost or ad starts paused unless
+`Paused` is `fopost.Bool(false)`. A key may also be bound to a single workspace, in which case
 naming any other one returns `403`.
 
 Mutating endpoints require an active subscription and return `403` with code
@@ -576,28 +575,26 @@ Questions or a problem: [fopost.com/contact](https://fopost.com/contact).
 
 ### Google Ads
 
-Campaigns, ad groups, ads, audiences and insights are on `client.Ads` and dispatch by
-connection. What only Google has is on `client.GoogleAds`:
+Audiences and insights are on `client.Ads` and dispatch by connection. What only Google
+has is on `client.GoogleAds`:
 
 ```go
 scope := fopost.GoogleScope{ConnectionID: "c4d5e6f7-…", CustomerID: "1234567890"}
 
-keywords, err := client.GoogleAds.Keywords(ctx, scope, nil)
+strategies, err := client.GoogleAds.BidStrategies(ctx, scope)
 
-id, err := client.GoogleAds.CreateKeyword(ctx, &fopost.CreateGoogleKeywordRequest{
+id, err := client.GoogleAds.CreateBidStrategy(ctx, &fopost.CreateGoogleBidStrategyRequest{
     GoogleScope: fopost.GoogleScope{
         WorkspaceID:  "7d2b8c11-…",
         ConnectionID: "c4d5e6f7-…",
         CustomerID:   "1234567890",
     },
-    AdGroupID: "1234567890~adGroup~77",
-    Text:      "running shoes",
-    MatchType: fopost.GoogleMatchExact,
+    Name:        "Target CPA",
+    Type:        fopost.GoogleBidTargetCPA,
+    TargetMinor: fopost.Int(1500),
 })
 ```
 
-Also `KeywordIdeas`, `KeywordMetrics`, `SearchTerms`, `BidStrategies`, `AdSchedule` and
-`SetAdSchedule`, the negative keyword lists, `Assets` and `AssetGroups`,
-`LocalServicesLeads`, the conversion methods, and `Query` for a raw read-only GAQL
-SELECT. Changes need the `publish` scope as well as `ads`; `CustomerID` has to name an
-account the connection's grant reaches.
+Also `AdSchedule` and `SetAdSchedule`, `LocalServicesLeads`, the conversion methods, and
+`Query` for a raw read-only GAQL SELECT. Changes need the `publish` scope as well as
+`ads`; `CustomerID` has to name an account the connection's grant reaches.

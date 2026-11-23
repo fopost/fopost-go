@@ -3,7 +3,6 @@ package fopost
 import (
 	"context"
 	"net/url"
-	"strings"
 )
 
 // Company-list audiences, forecasts, conversion rules and the public ad
@@ -294,63 +293,4 @@ func (s *AdsService) SendConversionEvents(ctx context.Context, id string, params
 
 func conversionRulePath(id, suffix string) string {
 	return "/ads/linkedin/conversion-rules/" + url.PathEscape(id) + suffix
-}
-
-// AdLibraryParams narrows an ad-library search. Countries are ISO 3166-1
-// alpha-2 codes; Since and Until are YYYY-MM-DD.
-type AdLibraryParams struct {
-	WorkspaceID  string
-	ConnectionID string
-	Keyword      string
-	Advertiser   string
-	Countries    []string
-	Since        string
-	Until        string
-	Cursor       string
-}
-
-// AdLibraryAd is a public ad from the network's own library, never a
-// connection's own data.
-type AdLibraryAd struct {
-	ID                string   `json:"id"`
-	AdvertiserName    string   `json:"advertiserName"`
-	AdvertiserURL     string   `json:"advertiserUrl"`
-	Headline          string   `json:"headline"`
-	Body              string   `json:"body"`
-	Type              string   `json:"type"`
-	ThumbnailURL      string   `json:"thumbnailUrl"`
-	FirstImpressionAt string   `json:"firstImpressionAt"`
-	LastImpressionAt  string   `json:"lastImpressionAt"`
-	Countries         []string `json:"countries"`
-	DetailsURL        string   `json:"detailsUrl"`
-	// Payer is the paying entity, where the network discloses one.
-	Payer            string `json:"payer"`
-	ImpressionsRange string `json:"impressionsRange"`
-}
-
-// AdLibraryPage is one page of results; pass NextCursor back as Cursor.
-type AdLibraryPage struct {
-	Ads        []AdLibraryAd `json:"ads"`
-	NextCursor string        `json:"nextCursor"`
-}
-
-// AdLibrary searches the network's own public ad library, not the
-// connection's ads.
-func (s *AdsService) AdLibrary(ctx context.Context, params *AdLibraryParams) (*AdLibraryPage, error) {
-	q := newQuery()
-	if params != nil {
-		q.str("workspace_id", params.WorkspaceID)
-		q.str("connection_id", params.ConnectionID)
-		q.str("keyword", params.Keyword)
-		q.str("advertiser", params.Advertiser)
-		q.str("countries", strings.Join(params.Countries, ","))
-		q.str("since", params.Since)
-		q.str("until", params.Until)
-		q.str("cursor", params.Cursor)
-	}
-	var out AdLibraryPage
-	if err := s.client.json(ctx, "GET", "/ads/ad-library", nil, q.values(), &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
 }

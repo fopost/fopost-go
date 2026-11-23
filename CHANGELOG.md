@@ -9,6 +9,11 @@ All notable changes to this module are documented here. Releases are tags on `ma
 - `VideoEdits` service: `Ops`, `List`, `Create` and `Get` for background edit jobs on a video (`/video-edits`, needs `posts`), with `VideoEdit`, `VideoEditOperation` and the `VideoEdit*` status constants.
 - `Media.GenerateAltText` writes and saves alt text for an asset (`POST /media/{id}/alt-text`, needs `ai`), answering `GeneratedAltText`.
 
+### Removed
+
+- `Ads.Tree`, the campaign, ad set and network ad calls (`CreateCampaign`, `Campaign`, `UpdateCampaign`, `DeleteCampaign`, `DuplicateCampaign`, `CreateAdSet`, `AdSet`, `UpdateAdSet`, `DeleteAdSet`, `DuplicateAdSet`, `CreateNetworkAd`, `NetworkAd`, `UpdateNetworkAd`, `DeleteNetworkAd`, `DuplicateNetworkAd`), the creative calls (`Creatives`, `CreateCreative`, `Creative`, `DeleteCreative`), the product catalog calls (`Catalogs` through `DeleteProductSet`), `Library` and `AdLibrary`, with the types and `Creative*` constants only they used. The API no longer serves these routes. Boosts, standalone ads (`Create`, `Refresh`, `SetStatus`, `Delete`), `SetStatuses`, audiences, lead forms, insights and tracking are unchanged, and `CreateAdRequest.ProductSetID` stays for the `sales` goal.
+- `GoogleAds` keyword, keyword idea and metric, search term, negative keyword list, asset, asset group and recommendation calls, `OptimizationScore`, and their types and the `GoogleMatch*` and `GoogleField*` constants. Bid strategies, the ad schedule, Local Services leads, conversions and `Query` are unchanged.
+
 ## 0.4.0 - 2026-11-19
 
 - `Queue` service for the posting queue: `ListSlots`, `CreateSlot`, `UpdateSlot`, `DeleteSlot`, `Next` and `Preview`, with the `QueueSlot`, `UpdatedQueueSlot`, `DeletedQueueSlot` and `QueueMove` types. `CreatePostRequest` and `UpdatePostRequest` gain `Schedule`; set it to `ScheduleQueue` to land the post in the next free slot.
